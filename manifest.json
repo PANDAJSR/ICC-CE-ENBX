@@ -1,0 +1,15 @@
+{
+  "Id": "com.pandajsr.icc-ce-enbx",
+  "Name": "ENBX Presentation",
+  "Version": "0.1.0",
+  "Description": "Play ENBX courseware in ICC-CE and reuse the host PPT presentation UI.",
+  "Author": "PANDA-JSR",
+  "EntranceAssembly": "ICC.CE.ENBX.dll",
+  "ApiVersion": "1.8",
+  "MinHostVersion": "1.8.0",
+  "Icon": "",
+  "License": "AGPL-3.0-only",
+  "Tags": ["ENBX", "presentation", "WebView2"],
+  "SourceUrl": "https://github.com/PANDAJSR/WebEasiNote",
+  "Permissions": ["FileSystem"]
+}

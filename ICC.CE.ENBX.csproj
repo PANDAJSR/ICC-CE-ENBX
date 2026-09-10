@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ICC.CE.ENBX</RootNamespace>
+    <AssemblyName>ICC.CE.ENBX</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <CreateIcpx>true</CreateIcpx>
+    <IcpxPackageName>com.pandajsr.icc-ce-enbx.icpx</IcpxPackageName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="InkCanvas.PluginSdk" Version="1.8.0.2-gbd4880718d">
+      <Private>false</Private>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+  </ItemGroup>
+
+  <ItemGroup Condition="Exists('..\WebEasiNote\dist')">
+    <EmbeddedResource Include="..\WebEasiNote\dist\**\*.*">
+      <LogicalName>ICC.CE.ENBX.Web.%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <UpToDateCheckInput Include="..\WebEasiNote\dist\**\*.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="manifest.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
