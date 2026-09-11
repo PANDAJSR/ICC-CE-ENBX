@@ -16,6 +16,12 @@ Runtime diagnostics are written to the plugin log directory:
 
 `<ICC-CE>/PluginLogs/com.pandajsr.icc-ce-enbx/`
 
+Frontend `console.log/info/warn/error/debug`, uncaught exceptions, unhandled Promise rejections, and ENBX load errors are forwarded into this same file with a `[Frontend]` prefix. Missing embedded assets are also recorded.
+
+### Frontend DevTools
+
+DevTools is disabled by default. To enable it for diagnosis, set the user environment variable `ICC_CE_ENBX_DEVTOOLS=1`, restart ICC-CE, open an ENBX document, then press `F12` or `Ctrl+Shift+I` inside the WebView. The browser console opens in a separate WebView2 DevTools window. Remove the variable and restart ICC-CE after diagnosis.
+
 Key entries to look for:
 
 | Log line | Meaning |

@@ -429,4 +429,9 @@ public sealed class EnbxWebMessage
     public int PageCount { get; set; }
     public int CurrentPage { get; set; }
     public int Page { get; set; }
+    public string Level { get; set; } = "";
+    public string Text { get; set; } = "";
+    public int Line { get; set; }
+    public int Column { get; set; }
+    public string Stack { get; set; } = "";
 }

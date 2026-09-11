@@ -23,6 +23,10 @@ public sealed class EnbxWebViewLayer : Grid, IDisposable
     private bool _isReady;
     private bool _disposed;
 
+    public static bool DiagnosticsEnabled
+        => string.Equals(Environment.GetEnvironmentVariable("ICC_CE_ENBX_DEVTOOLS"), "1", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(Environment.GetEnvironmentVariable("ICC_CE_ENBX_DEVTOOLS"), "true", StringComparison.OrdinalIgnoreCase);
+
     public event Action<EnbxWebMessage>? MessageReceived;
     public event Action<string>? LoadFailed;
     public event Action<string>? Diagnostic;
@@ -82,14 +86,18 @@ public sealed class EnbxWebViewLayer : Grid, IDisposable
 
             var core = _webView.CoreWebView2;
             core.Settings.AreDefaultContextMenusEnabled = false;
-            core.Settings.AreDevToolsEnabled = false;
+            core.Settings.AreDevToolsEnabled = DiagnosticsEnabled;
             core.Settings.IsStatusBarEnabled = false;
             core.AddWebResourceRequestedFilter(AppOrigin + "/*", CoreWebView2WebResourceContext.All);
             core.WebResourceRequested += OnWebResourceRequested;
             core.WebMessageReceived += OnWebMessageReceived;
+            core.NavigationCompleted += OnNavigationCompleted;
+            await core.AddScriptToExecuteOnDocumentCreatedAsync(BuildDiagnosticsScript());
             core.Navigate(AppOrigin + AppPath + "/index.html");
             _isReady = true;
-            Diagnostic?.Invoke("WebView2 navigated to " + AppOrigin + AppPath + "/index.html");
+            Diagnostic?.Invoke(
+                "WebView2 navigated to " + AppOrigin + AppPath + "/index.html" +
+                $"; devtoolsEnabled={DiagnosticsEnabled}");
         }
         catch (Exception ex)
         {
@@ -146,6 +154,17 @@ public sealed class EnbxWebViewLayer : Grid, IDisposable
             var message = JsonSerializer.Deserialize<EnbxWebMessage>(e.WebMessageAsJson, JsonOptions);
             if (message == null) return;
             Diagnostic?.Invoke("Received web message: " + message.Type);
+            if (message.Type == "enbx:frontend-log")
+            {
+                Diagnostic?.Invoke(
+                    $"[Frontend][{message.Level}] {message.Text}" +
+                    (string.IsNullOrWhiteSpace(message.Stack) ? "" : $" | stack={message.Stack}") +
+                    (string.IsNullOrWhiteSpace(message.Url) ? "" : $" | source={message.Url}:{message.Line}:{message.Column}"));
+            }
+            else if (message.Type == "enbx:open-devtools")
+            {
+                OpenDevTools();
+            }
             if (message.Type == "enbx:web-ready") PostOpenDocument();
             MessageReceived?.Invoke(message);
         }
@@ -154,6 +173,12 @@ public sealed class EnbxWebViewLayer : Grid, IDisposable
             Diagnostic?.Invoke("Web message parse failed: " + ex);
             LoadFailed?.Invoke("Invalid web message: " + ex.Message);
         }
+    }
+
+    private void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+    {
+        Diagnostic?.Invoke(
+            $"NavigationCompleted: success={e.IsSuccess}, status={e.HttpStatusCode}, webError={e.WebErrorStatus}");
     }
 
     private void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
@@ -234,6 +259,63 @@ public sealed class EnbxWebViewLayer : Grid, IDisposable
         });
     }
 
+    public void OpenDevTools()
+    {
+        if (!DiagnosticsEnabled || _disposed || _webView.CoreWebView2 == null)
+        {
+            Diagnostic?.Invoke("DevTools request ignored; diagnostics are disabled or WebView2 is not ready.");
+            return;
+        }
+
+        _webView.CoreWebView2.OpenDevToolsWindow();
+        Diagnostic?.Invoke("WebView2 DevTools window opened.");
+    }
+
+    private static string BuildDiagnosticsScript()
+        => @"
+(() => {
+  if (window.__enbxDiagnosticsInstalled) return;
+  window.__enbxDiagnosticsInstalled = true;
+  const send = (level, args, extra = {}) => {
+    try {
+      if (!window.chrome?.webview?.postMessage) return;
+      const text = args.map(value => {
+        try {
+          if (typeof value === 'string') return value;
+          return JSON.stringify(value);
+        } catch (_) { return String(value); }
+      }).join(' ');
+      window.chrome.webview.postMessage({
+        type: 'enbx:frontend-log',
+        level,
+        text,
+        url: location.href,
+        ...extra
+      });
+    } catch (_) {}
+  };
+  for (const level of ['log', 'info', 'warn', 'error', 'debug']) {
+    const original = console[level];
+    console[level] = (...args) => {
+      send(level, args);
+      original?.apply(console, args);
+    };
+  }
+  window.addEventListener('error', event => send('uncaught-error', [event.message], {
+    url: event.filename || location.href,
+    line: event.lineno || 0,
+    column: event.colno || 0,
+    stack: event.error?.stack || ''
+  }));
+  window.addEventListener('unhandledrejection', event => send('unhandled-rejection', [event.reason?.stack || event.reason || 'Unknown rejection']));
+  document.addEventListener('keydown', event => {
+    if (event.key === 'F12' || (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'i')) {
+      event.preventDefault();
+      window.chrome?.webview?.postMessage({ type: 'enbx:open-devtools' });
+    }
+  }, true);
+})();";
+
     private void Post(object message)
     {
         if (!_isReady || _disposed) return;
@@ -263,6 +345,7 @@ public sealed class EnbxWebViewLayer : Grid, IDisposable
         {
             _webView.CoreWebView2.WebMessageReceived -= OnWebMessageReceived;
             _webView.CoreWebView2.WebResourceRequested -= OnWebResourceRequested;
+            _webView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
         }
         _webView.Dispose();
     }
