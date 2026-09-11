@@ -18,11 +18,13 @@ public sealed class Plugin : PluginBase
     private IWindowService? _window;
     private EnbxWebViewLayer? _webView;
     private EnbxPresentationWindow? _presentationWindow;
+    private HostInkPageBridge? _inkBridge;
     private ToolsMenuBridge? _toolsMenu;
     private readonly Dictionary<string, TaskCompletionSource<int>> _navigationRequests = new();
     private readonly object _navigationLock = new();
     private bool _presentationActive;
     private int _activePageCount;
+    private int _currentPresentationPage;
     private bool _wasFullscreen;
     private int _ending;
     private FrameworkElement? _hostBackgroundCover;
@@ -52,6 +54,7 @@ public sealed class Plugin : PluginBase
         _webView.LoadFailed += OnWebViewLoadFailed;
         _webView.Diagnostic += message => _host?.Log("[WebView] " + message);
         _presentationWindow = new EnbxPresentationWindow(_webView);
+        _inkBridge = new HostInkPageBridge(this);
 
         _presentation.Ended += OnPresentationEnded;
         _toolsMenu = new ToolsMenuBridge(this);
@@ -182,6 +185,7 @@ public sealed class Plugin : PluginBase
         }
 
         _presentationWindow?.ShowFor(mainWindow);
+        _inkBridge?.Attach(mainWindow);
         SetHostOverlay(true);
         _host?.Log("ENBX output window shown behind the ICC-CE window.");
     }
@@ -208,7 +212,10 @@ public sealed class Plugin : PluginBase
                     break;
                 case "enbx:page-changed":
                     if (_presentationActive && message.Page > 0)
+                    {
                         await _presentation!.UpdatePageAsync(message.Page);
+                        SwitchInkPage(message.Page);
+                    }
                     break;
                 case "enbx:close":
                     await EndPresentationAsync();
@@ -260,6 +267,8 @@ public sealed class Plugin : PluginBase
 
         _presentationActive = true;
         _activePageCount = pageCount;
+        _currentPresentationPage = descriptor.CurrentPage;
+        _inkBridge?.BeginDocument(_currentPresentationPage);
         _ending = 0;
         _window?.SetFullscreen(true);
         _host?.Log("ENBX presentation active; host PPT controls should now be visible.");
@@ -277,7 +286,9 @@ public sealed class Plugin : PluginBase
         {
             _host?.Log($"Host navigation requested: {direction}, request={requestId}");
             _webView.Navigate(direction == PresentationNavigation.Previous ? "previous" : "next", requestId);
-            return await completion.Task.WaitAsync(TimeSpan.FromSeconds(8), cancellationToken);
+            var newPage = await completion.Task.WaitAsync(TimeSpan.FromSeconds(8), cancellationToken);
+            if (newPage > 0) SwitchInkPage(newPage);
+            return newPage;
         }
         catch (OperationCanceledException)
         {
@@ -303,6 +314,14 @@ public sealed class Plugin : PluginBase
         }
     }
 
+    /// <summary>把宿主翻页同步到墨迹分页，保证批注留在各自页面。</summary>
+    private void SwitchInkPage(int page)
+    {
+        if (page <= 0 || page == _currentPresentationPage) return;
+        _currentPresentationPage = page;
+        _inkBridge?.SwitchPage(page);
+    }
+
     private async Task EndPresentationAsync()
     {
         if (Interlocked.Exchange(ref _ending, 1) != 0) return;
@@ -322,6 +341,8 @@ public sealed class Plugin : PluginBase
         {
             _presentationActive = false;
             _activePageCount = 0;
+            _currentPresentationPage = 0;
+            _inkBridge?.EndDocument();
             _webView?.SetViewerVisible(false);
             _presentationWindow?.Hide();
             SetHostOverlay(false);

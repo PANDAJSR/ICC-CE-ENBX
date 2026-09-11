@@ -2,7 +2,6 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
-using System.Windows.Threading;
 
 namespace ICC.CE.ENBX;
 
@@ -23,11 +22,12 @@ internal sealed class EnbxPresentationWindow : IDisposable
     private const uint SwpNoMove = 0x0002;
     private const uint SwpNoActivate = 0x0010;
     private const int GwlExStyle = -20;
+    private const int WsExTopMost = 0x00000008;
     private const int WsExNoActivate = 0x08000000;
     private const int WsExToolWindow = 0x00000080;
+    private static readonly IntPtr HwndTop = IntPtr.Zero;
     private static readonly IntPtr HwndTopMost = new(-1);
     private static readonly IntPtr HwndNotTopMost = new(-2);
-    private static readonly IntPtr HwndBottom = new(1);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetWindowPos(
@@ -42,7 +42,6 @@ internal sealed class EnbxPresentationWindow : IDisposable
     private readonly EnbxWebViewLayer _layer;
     private Window? _window;
     private Window? _host;
-    private DispatcherTimer? _anchorTimer;
     private bool _allowClose;
     private bool _disposed;
 
@@ -88,13 +87,11 @@ internal sealed class EnbxPresentationWindow : IDisposable
         _window.Show();
         UpdateBounds();
         _window.UpdateLayout();
-        AnchorBelowHost();
-        StartAnchorTimer();
+        Anchor();
     }
 
     public void Hide()
     {
-        StopAnchorTimer();
         DetachHost();
         _window?.Hide();
     }
@@ -114,7 +111,7 @@ internal sealed class EnbxPresentationWindow : IDisposable
         if (next != exStyle) SetWindowLong32(handle, GwlExStyle, next);
     }
 
-    private void OnWindowActivated(object? sender, EventArgs e) => AnchorBelowHost();
+    private void OnWindowActivated(object? sender, EventArgs e) => Anchor();
 
     private void OnWindowClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
@@ -122,18 +119,6 @@ internal sealed class EnbxPresentationWindow : IDisposable
         e.Cancel = true;
         _window?.Hide();
     }
-
-    private void StartAnchorTimer()
-    {
-        _anchorTimer ??= new DispatcherTimer(
-            TimeSpan.FromMilliseconds(1000),
-            DispatcherPriority.Background,
-            (_, _) => AnchorBelowHost(),
-            Dispatcher.CurrentDispatcher);
-        _anchorTimer.Start();
-    }
-
-    private void StopAnchorTimer() => _anchorTimer?.Stop();
 
     private void DetachHost()
     {
@@ -147,7 +132,7 @@ internal sealed class EnbxPresentationWindow : IDisposable
     private void OnHostBoundsChanged(object? sender, EventArgs e)
     {
         UpdateBounds();
-        AnchorBelowHost();
+        Anchor();
     }
 
     private void UpdateBounds()
@@ -158,6 +143,12 @@ internal sealed class EnbxPresentationWindow : IDisposable
         var height = _host.ActualHeight > 0 ? _host.ActualHeight : _host.Height;
         if (double.IsNaN(width) || double.IsNaN(height) || width <= 0 || height <= 0) return;
 
+        if (Math.Abs(_window.Left - _host.Left) < 0.5 &&
+            Math.Abs(_window.Top - _host.Top) < 0.5 &&
+            Math.Abs(_window.Width - width) < 0.5 &&
+            Math.Abs(_window.Height - height) < 0.5)
+            return;
+
         _window.Left = _host.Left;
         _window.Top = _host.Top;
         _window.Width = width;
@@ -165,20 +156,25 @@ internal sealed class EnbxPresentationWindow : IDisposable
     }
 
     /// <summary>
-    /// Inserts this window directly below the ICC-CE window in the z-order.
-    /// Being immediately below means the web content shows through ICC-CE's
-    /// transparent canvas while ICC-CE keeps its toolbars and nav bars on top.
+    /// Keeps the web window out of the way of ICC-CE's owner-drawn UI.
+    /// When ICC-CE is topmost (which the plugin enforces while presenting) no
+    /// ordinary window can cover it, so the web window only needs to sit above
+    /// other ordinary windows. Re-inserting it after the host on every tick
+    /// would repeatedly change the z-order and make the host toolbar flicker.
     /// </summary>
-    private void AnchorBelowHost()
+    private void Anchor()
     {
         if (_window == null || !_window.IsVisible) return;
         var handle = new WindowInteropHelper(_window).Handle;
         if (handle == IntPtr.Zero) return;
 
         var hostHandle = _host != null ? new WindowInteropHelper(_host).Handle : IntPtr.Zero;
+        var hostIsTopMost = hostHandle != IntPtr.Zero &&
+            (GetWindowLong32(hostHandle, GwlExStyle) & WsExTopMost) != 0;
+
         SetWindowPos(
             handle,
-            hostHandle != IntPtr.Zero ? hostHandle : HwndBottom,
+            hostIsTopMost || hostHandle == IntPtr.Zero ? HwndTop : hostHandle,
             0, 0, 0, 0,
             SwpNoMove | SwpNoSize | SwpNoActivate);
     }
@@ -200,7 +196,6 @@ internal sealed class EnbxPresentationWindow : IDisposable
         if (_disposed) return;
         _disposed = true;
 
-        StopAnchorTimer();
         DetachHost();
         if (_window != null)
         {
