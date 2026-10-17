@@ -30,5 +30,7 @@
 
   <ItemGroup>
     <None Update="manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="icon.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="icon_mono.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
