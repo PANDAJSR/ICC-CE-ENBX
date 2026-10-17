@@ -69,6 +69,7 @@ internal sealed class EnbxPresentationWindow : IDisposable
     private bool _disposed;
 
     public event EventHandler? CloseRequested;
+    public event EventHandler<string>? PageClickRequested;
 
     public EnbxPresentationWindow(EnbxWebViewLayer layer)
     {
@@ -110,6 +111,11 @@ internal sealed class EnbxPresentationWindow : IDisposable
             _host.LocationChanged += OnHostBoundsChanged;
             _host.SizeChanged += OnHostBoundsChanged;
             _host.StateChanged += OnHostBoundsChanged;
+            HookNavBarPageClicks();
+        }
+        else
+        {
+            HookNavBarPageClicks();
         }
 
         TryUnregisterFromHostTopmostManager();
@@ -215,10 +221,72 @@ internal sealed class EnbxPresentationWindow : IDisposable
     private void DetachHost()
     {
         if (_host == null) return;
+        UnhookNavBarPageClicks();
         _host.LocationChanged -= OnHostBoundsChanged;
         _host.SizeChanged -= OnHostBoundsChanged;
         _host.StateChanged -= OnHostBoundsChanged;
         _host = null;
+    }
+
+    private readonly List<(EventInfo Event, object Target, Delegate Handler)> _hookedEvents = new();
+
+    private void HookNavBarPageClicks()
+    {
+        UnhookNavBarPageClicks();
+        if (_host == null) return;
+
+        HookBar("LeftBottomPanelForPPTNavigation", "left");
+        HookBar("LeftSidePanelForPPTNavigation", "left");
+        HookBar("RightBottomPanelForPPTNavigation", "right");
+        HookBar("RightSidePanelForPPTNavigation", "right");
+    }
+
+    private void HookBar(string name, string side)
+    {
+        var bar = FindElement(name);
+        if (bar == null) return;
+
+        var evt = bar.GetType().GetEvent("PageClick");
+        if (evt == null) return;
+
+        EventHandler handler = (s, e) =>
+        {
+            PageClickRequested?.Invoke(this, side);
+        };
+
+        evt.AddEventHandler(bar, handler);
+        _hookedEvents.Add((evt, bar, handler));
+    }
+
+    private void UnhookNavBarPageClicks()
+    {
+        foreach (var (evt, target, handler) in _hookedEvents)
+        {
+            try { evt.RemoveEventHandler(target, handler); } catch { }
+        }
+        _hookedEvents.Clear();
+    }
+
+    private FrameworkElement? FindElement(string name)
+    {
+        if (_host == null) return null;
+        if (_host.FindName(name) is FrameworkElement found) return found;
+        return FindVisualChildByName<FrameworkElement>(_host, name);
+    }
+
+    private static T? FindVisualChildByName<T>(DependencyObject parent, string name) where T : FrameworkElement
+    {
+        int count = VisualTreeHelper.GetChildrenCount(parent);
+        for (int i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T element && element.Name == name)
+                return element;
+
+            var result = FindVisualChildByName<T>(child, name);
+            if (result != null) return result;
+        }
+        return null;
     }
 
     private void OnHostBoundsChanged(object? sender, EventArgs e)

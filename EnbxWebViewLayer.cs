@@ -60,6 +60,12 @@ public sealed class EnbxWebViewLayer : Grid, IDisposable
             Post(new { type = "enbx:navigate", direction, requestId })));
     }
 
+    public void ToggleThumbnails(string side)
+    {
+        Dispatcher.BeginInvoke(new Action(() =>
+            Post(new { type = "enbx:toggle-thumbnails", side = side == "right" ? "right" : "left" })));
+    }
+
     public void SetViewerVisible(bool visible)
         => Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
 

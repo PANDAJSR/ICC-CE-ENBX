@@ -56,6 +56,7 @@ public sealed class Plugin : PluginBase
         _webView.Diagnostic += message => _host?.Log("[WebView] " + message);
         _presentationWindow = new EnbxPresentationWindow(_webView);
         _presentationWindow.CloseRequested += (s, e) => _ = EndPresentationAsync();
+        _presentationWindow.PageClickRequested += OnPresentationPageClickRequested;
         _inkBridge = new HostInkPageBridge(this);
 
         _presentation.Ended += OnPresentationEnded;
@@ -282,7 +283,7 @@ public sealed class Plugin : PluginBase
             Name = "ENBX Presentation",
             PageCount = pageCount,
             CurrentPage = Math.Clamp(currentPage, 1, pageCount),
-            AllowPageNumberClick = false,
+            AllowPageNumberClick = true,
             NavigateAsync = NavigateAsync
         };
 
@@ -340,6 +341,17 @@ public sealed class Plugin : PluginBase
             if (_navigationRequests.TryGetValue(requestId, out var completion))
                 completion.TrySetResult(page);
         }
+    }
+
+    private long _lastToggleTicks;
+    private void OnPresentationPageClickRequested(object? sender, string side)
+    {
+        var now = Environment.TickCount64;
+        if (now - _lastToggleTicks < 300) return;
+        _lastToggleTicks = now;
+
+        _host?.Log($"Page click requested from {side} nav bar; toggling thumbnails.");
+        _webView?.ToggleThumbnails(side);
     }
 
     /// <summary>把宿主翻页同步到墨迹分页，保证批注留在各自页面。</summary>
