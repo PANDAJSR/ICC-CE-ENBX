@@ -1,7 +1,7 @@
 {
   "name": "icc-ce-enbx",
   "version": "0.1.0",
-  "description": "ICC-CE ENBX presentation plugin",
+  "description": "ICC-CE ENBX presentation and MAXHUB MHB whiteboard plugin",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,8 +13,11 @@
   "keywords": [
     "icc-ce",
     "enbx",
+    "mhb",
+    "maxhub",
     "plugin",
-    "presentation"
+    "presentation",
+    "whiteboard"
   ],
   "author": "PANDA-JSR",
   "license": "AGPL-3.0-only"

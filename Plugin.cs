@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Windows;
@@ -35,7 +36,7 @@ public sealed class Plugin : PluginBase
     public override string Id => PluginId;
     public override string Name => "ENBX Presentation";
     public override string Version => "0.1.0";
-    public override string Description => "Play ENBX courseware in ICC-CE and reuse the host PPT presentation UI.";
+    public override string Description => "Play ENBX courseware and import MAXHUB MHB whiteboard files in ICC-CE.";
     public override string Author => "PANDA-JSR";
 
     public override void Initialize(IPluginHost host)
@@ -54,6 +55,7 @@ public sealed class Plugin : PluginBase
         _webView.LoadFailed += OnWebViewLoadFailed;
         _webView.Diagnostic += message => _host?.Log("[WebView] " + message);
         _presentationWindow = new EnbxPresentationWindow(_webView);
+        _presentationWindow.CloseRequested += (s, e) => _ = EndPresentationAsync();
         _inkBridge = new HostInkPageBridge(this);
 
         _presentation.Ended += OnPresentationEnded;
@@ -98,35 +100,29 @@ public sealed class Plugin : PluginBase
         => _host?.Log(message);
 
     private async Task OpenFromDialogAsync()
-    {
-        try
-        {
-            var path = _fileDialog?.OpenFile(
-                "Open ENBX courseware",
-                "ENBX files (*.enbx)|*.enbx|All files (*.*)|*.*");
-            if (!string.IsNullOrWhiteSpace(path)) await OpenFileAsync(path);
-        }
-        catch (Exception ex)
-        {
-            _host?.LogError("Failed to open ENBX file.", ex);
-        }
-    }
+        => await OpenMixedFileDialogAsync();
 
     private async Task OpenMixedFileDialogAsync()
     {
         try
         {
-            var path = _fileDialog?.OpenFile(
-                "Open ICC-CE or ENBX file",
-                "ENBX courseware (*.enbx)|*.enbx|Ink files (*.uink;*.zip;*.xml;*.icstk)|*.uink;*.zip;*.xml;*.icstk|All files (*.*)|*.*");
+            var isZh = CultureInfo.CurrentUICulture.Name.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
+            var title = isZh ? "打开课件或墨迹文件" : "Open ICC-CE or ENBX file";
+            var filter = isZh
+                ? "所有支持的文件 (*.enbx;*.mhb;*.uink;*.zip;*.xml;*.icstk)|*.enbx;*.mhb;*.uink;*.zip;*.xml;*.icstk|ENBX 课件 (*.enbx)|*.enbx|MAXHUB 白板文件 (*.mhb)|*.mhb|墨迹文件 (*.uink;*.zip;*.xml;*.icstk)|*.uink;*.zip;*.xml;*.icstk|所有文件 (*.*)|*.*"
+                : "All Supported Files (*.enbx;*.mhb;*.uink;*.zip;*.xml;*.icstk)|*.enbx;*.mhb;*.uink;*.zip;*.xml;*.icstk|ENBX courseware (*.enbx)|*.enbx|MAXHUB Whiteboard (*.mhb)|*.mhb|Ink files (*.uink;*.zip;*.xml;*.icstk)|*.uink;*.zip;*.xml;*.icstk|All files (*.*)|*.*";
+
+            var path = _fileDialog?.OpenFile(title, filter);
             if (string.IsNullOrWhiteSpace(path)) return;
 
-            if (string.Equals(Path.GetExtension(path), ".enbx", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(Path.GetExtension(path), ".enbx", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(Path.GetExtension(path), ".mhb", StringComparison.OrdinalIgnoreCase))
             {
                 await OpenFileAsync(path);
                 return;
             }
 
+            if (_presentationActive) await EndPresentationAsync();
             OpenHostStrokeFile(path);
         }
         catch (Exception ex)
@@ -137,7 +133,7 @@ public sealed class Plugin : PluginBase
 
     private static void OpenHostStrokeFile(string path)
     {
-        var mainWindow = Application.Current?.MainWindow;
+        var mainWindow = GetHostMainWindow();
         if (mainWindow == null) throw new InvalidOperationException("ICC-CE main window is unavailable.");
 
         var methodName = Path.GetExtension(path).ToLowerInvariant() switch
@@ -152,19 +148,48 @@ public sealed class Plugin : PluginBase
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
         if (method == null) throw new MissingMethodException(mainWindow.GetType().FullName, methodName);
         method.Invoke(mainWindow, new object[] { path });
+
+        try
+        {
+            var inkCanvasProperty = mainWindow.GetType().GetProperty("inkCanvas", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                ?? (object?)mainWindow.GetType().GetField("inkCanvas", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            var inkCanvas = inkCanvasProperty is PropertyInfo pi ? pi.GetValue(mainWindow) as UIElement : (inkCanvasProperty as FieldInfo)?.GetValue(mainWindow) as UIElement;
+            if (inkCanvas != null && inkCanvas.Visibility != Visibility.Visible)
+            {
+                var cursorMethod = mainWindow.GetType().GetMethod("SymbolIconCursor_Click", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                cursorMethod?.Invoke(mainWindow, new object?[] { null, null });
+            }
+        }
+        catch
+        {
+            // Best effort switch to cursor mode
+        }
     }
 
     private async Task OpenFileAsync(string path)
     {
         if (!File.Exists(path))
         {
-            _host?.Log($"ENBX file does not exist: {path}");
+            _host?.Log($"File does not exist: {path}");
             return;
         }
 
-        if (!string.Equals(Path.GetExtension(path), ".enbx", StringComparison.OrdinalIgnoreCase))
+        var ext = Path.GetExtension(path);
+        if (string.Equals(ext, ".mhb", StringComparison.OrdinalIgnoreCase))
         {
-            _host?.Log($"Ignoring non-ENBX file: {path}");
+            if (_presentationActive) await EndPresentationAsync();
+            _host?.Log($"Opening MHB natively into whiteboard: {path}");
+            var mainWindow = GetHostMainWindow();
+            if (mainWindow != null)
+            {
+                MhbWhiteboardImporter.ImportToWhiteboard(path, mainWindow, message => _host?.Log(message));
+            }
+            return;
+        }
+
+        if (!string.Equals(ext, ".enbx", StringComparison.OrdinalIgnoreCase))
+        {
+            _host?.Log($"Ignoring unsupported file: {path}");
             return;
         }
 
@@ -198,7 +223,10 @@ public sealed class Plugin : PluginBase
     {
         try
         {
-            _host?.Log($"WebView message: {message.Type} page={message.Page} pages={message.PageCount} request={message.RequestId}");
+            if (message.Type != "enbx:frontend-log")
+            {
+                _host?.Log($"WebView message: {message.Type} page={message.Page} pages={message.PageCount} request={message.RequestId}");
+            }
             switch (message.Type)
             {
                 case "enbx:request-open":
@@ -397,6 +425,13 @@ public sealed class Plugin : PluginBase
             _savedTopMost = _window?.IsTopMost == true;
             _window?.SetTopMost(true);
             EnbxPresentationWindow.ForceTopMost(mainWindow, true);
+            try
+            {
+                var wtmType = mainWindow.GetType().Assembly.GetType("Ink_Canvas.Helpers.WindowTopmostManager");
+                var startMaint = wtmType?.GetMethod("StartTopmostMaintenance", BindingFlags.Public | BindingFlags.Static);
+                startMaint?.Invoke(null, new object[] { mainWindow });
+            }
+            catch { }
 
             _hostOverlayApplied = true;
             _host?.Log(
@@ -406,6 +441,14 @@ public sealed class Plugin : PluginBase
         }
 
         if (!_hostOverlayApplied) return;
+
+        try
+        {
+            var wtmType = mainWindow.GetType().Assembly.GetType("Ink_Canvas.Helpers.WindowTopmostManager");
+            var stopMaint = wtmType?.GetMethod("StopTopmostMaintenance", BindingFlags.Public | BindingFlags.Static);
+            stopMaint?.Invoke(null, null);
+        }
+        catch { }
 
         if (_hostBackgroundCover != null)
             _hostBackgroundCover.Visibility = _savedBackgroundCoverVisibility;

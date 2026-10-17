@@ -36,6 +36,13 @@ public sealed class EnbxWebViewLayer : Grid, IDisposable
         Background = System.Windows.Media.Brushes.Black;
         Visibility = Visibility.Collapsed;
         ClipToBounds = true;
+        _webView.PreviewKeyDown += (sender, e) =>
+        {
+            if (e.Key == System.Windows.Input.Key.Escape)
+            {
+                MessageReceived?.Invoke(new EnbxWebMessage { Type = "enbx:close" });
+            }
+        };
         Children.Add(_webView);
     }
 
@@ -153,13 +160,19 @@ public sealed class EnbxWebViewLayer : Grid, IDisposable
         {
             var message = JsonSerializer.Deserialize<EnbxWebMessage>(e.WebMessageAsJson, JsonOptions);
             if (message == null) return;
-            Diagnostic?.Invoke("Received web message: " + message.Type);
+            if (message.Type != "enbx:frontend-log")
+            {
+                Diagnostic?.Invoke("Received web message: " + message.Type);
+            }
             if (message.Type == "enbx:frontend-log")
             {
-                Diagnostic?.Invoke(
-                    $"[Frontend][{message.Level}] {message.Text}" +
-                    (string.IsNullOrWhiteSpace(message.Stack) ? "" : $" | stack={message.Stack}") +
-                    (string.IsNullOrWhiteSpace(message.Url) ? "" : $" | source={message.Url}:{message.Line}:{message.Column}"));
+                if (DiagnosticsEnabled)
+                {
+                    Diagnostic?.Invoke(
+                        $"[Frontend][{message.Level}] {message.Text}" +
+                        (string.IsNullOrWhiteSpace(message.Stack) ? "" : $" | stack={message.Stack}") +
+                        (string.IsNullOrWhiteSpace(message.Url) ? "" : $" | source={message.Url}:{message.Line}:{message.Column}"));
+                }
             }
             else if (message.Type == "enbx:open-devtools")
             {
@@ -276,6 +289,7 @@ public sealed class EnbxWebViewLayer : Grid, IDisposable
 (() => {
   if (window.__enbxDiagnosticsInstalled) return;
   window.__enbxDiagnosticsInstalled = true;
+  const devtoolsEnabled = " + (DiagnosticsEnabled ? "true" : "false") + @";
   const send = (level, args, extra = {}) => {
     try {
       if (!window.chrome?.webview?.postMessage) return;
@@ -294,12 +308,14 @@ public sealed class EnbxWebViewLayer : Grid, IDisposable
       });
     } catch (_) {}
   };
-  for (const level of ['log', 'info', 'warn', 'error', 'debug']) {
-    const original = console[level];
-    console[level] = (...args) => {
-      send(level, args);
-      original?.apply(console, args);
-    };
+  if (devtoolsEnabled) {
+    for (const level of ['log', 'info', 'warn', 'error', 'debug']) {
+      const original = console[level];
+      console[level] = (...args) => {
+        send(level, args);
+        original?.apply(console, args);
+      };
+    }
   }
   window.addEventListener('error', event => send('uncaught-error', [event.message], {
     url: event.filename || location.href,
@@ -309,6 +325,10 @@ public sealed class EnbxWebViewLayer : Grid, IDisposable
   }));
   window.addEventListener('unhandledrejection', event => send('unhandled-rejection', [event.reason?.stack || event.reason || 'Unknown rejection']));
   document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      window.chrome?.webview?.postMessage({ type: 'enbx:close' });
+      return;
+    }
     if (event.key === 'F12' || (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'i')) {
       event.preventDefault();
       window.chrome?.webview?.postMessage({ type: 'enbx:open-devtools' });
