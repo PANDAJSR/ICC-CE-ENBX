@@ -95,6 +95,7 @@ public sealed class EnbxWebViewLayer : Grid, IDisposable
             core.Settings.AreDefaultContextMenusEnabled = false;
             core.Settings.AreDevToolsEnabled = DiagnosticsEnabled;
             core.Settings.IsStatusBarEnabled = false;
+            try { core.Settings.IsNonClientRegionSupportEnabled = false; } catch { }
             core.AddWebResourceRequestedFilter(AppOrigin + "/*", CoreWebView2WebResourceContext.All);
             core.WebResourceRequested += OnWebResourceRequested;
             core.WebMessageReceived += OnWebMessageReceived;

@@ -30,6 +30,10 @@ internal sealed class EnbxPresentationWindow : IDisposable
     private const int WsExToolWindow = 0x00000080;
     private const int WmMouseActivate = 0x0021;
     private const int WmWindowPosChanging = 0x0046;
+    private const int WmNcLButtonDown = 0x00A1;
+    private const int WmSysCommand = 0x0112;
+    private const int ScMove = 0xF010;
+    private const int HtCaption = 2;
     private const int MaNoActivate = 3;
 
     private static readonly IntPtr HwndTop = IntPtr.Zero;
@@ -94,6 +98,7 @@ internal sealed class EnbxPresentationWindow : IDisposable
             _window.Closing += OnWindowClosing;
             _window.SourceInitialized += OnWindowSourceInitialized;
             _window.PreviewKeyDown += OnWindowPreviewKeyDown;
+            _window.LocationChanged += OnWindowLocationChanged;
             _window.Show();
             ApplyNoActivateStyle();
         }
@@ -120,6 +125,17 @@ internal sealed class EnbxPresentationWindow : IDisposable
         _window?.Hide();
     }
 
+    private void OnWindowLocationChanged(object? sender, EventArgs e)
+    {
+        if (_host != null && _window != null)
+        {
+            if (Math.Abs(_window.Left - _host.Left) >= 0.5 || Math.Abs(_window.Top - _host.Top) >= 0.5)
+            {
+                UpdateBounds();
+            }
+        }
+    }
+
     private void OnWindowSourceInitialized(object? sender, EventArgs e)
     {
         if (_window == null) return;
@@ -140,6 +156,19 @@ internal sealed class EnbxPresentationWindow : IDisposable
             // 点击课件不激活窗口，保留宿主工具栏为当前激活焦点，同时正常将点击分发给 WebView2
             handled = true;
             return new IntPtr(MaNoActivate);
+        }
+
+        // 拦截通过标题栏拖动或系统命令移动窗口的操作，确保全屏课件窗口绝对不可被拖动
+        if (msg == WmSysCommand && ((int)wParam.ToInt64() & 0xFFF0) == ScMove)
+        {
+            handled = true;
+            return IntPtr.Zero;
+        }
+
+        if (msg == WmNcLButtonDown && wParam.ToInt64() == HtCaption)
+        {
+            handled = true;
+            return IntPtr.Zero;
         }
 
         if (msg == WmWindowPosChanging)

@@ -1,0 +1,148 @@
+name: Build & Package Plugin (.icpx)
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - master
+      - main
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: '是否发布 GitHub Release'
+        type: boolean
+        default: false
+        required: false
+
+jobs:
+  build:
+    name: Build .icpx Package
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout ICC-CE-ENBX
+        uses: actions/checkout@v4
+        with:
+          path: ICC-CE-ENBX
+
+      - name: Checkout WebEasiNote
+        uses: actions/checkout@v4
+        with:
+          repository: PANDAJSR/WebEasiNote
+          path: WebEasiNote
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Build WebEasiNote Frontend
+        working-directory: WebEasiNote
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+        shell: pwsh
+        run: |
+          pnpm install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "pnpm install fallback..."
+            pnpm install
+          }
+          pnpm build
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build ICC-CE-ENBX Plugin (.icpx)
+        working-directory: ICC-CE-ENBX
+        shell: pwsh
+        run: |
+          dotnet build ICC.CE.ENBX.csproj -c Release
+
+      - name: Verify and Extract Package Info
+        id: package
+        working-directory: ICC-CE-ENBX
+        shell: pwsh
+        run: |
+          $icpx = Get-ChildItem -Path "icpx" -Filter "*.icpx" | Select-Object -First 1
+          if (-not $icpx) {
+            throw "未在 icpx/ 目录下找到 .icpx 插件包！"
+          }
+
+          $hash = (Get-FileHash -Path $icpx.FullName -Algorithm SHA256).Hash.ToLower()
+          $manifest = Get-Content "manifest.json" | ConvertFrom-Json
+          $version = $manifest.Version
+
+          Write-Host "----------------------------------------"
+          Write-Host "Found icpx: $($icpx.Name)"
+          Write-Host "Version: $version"
+          Write-Host "Size: $([math]::Round($icpx.Length / 1MB, 2)) MB"
+          Write-Host "SHA256: $hash"
+          Write-Host "----------------------------------------"
+
+          "icpx_name=$($icpx.Name)" >> $env:GITHUB_OUTPUT
+          "icpx_path=$($icpx.FullName)" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "sha256=$hash" >> $env:GITHUB_OUTPUT
+
+      - name: Upload .icpx Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.icpx_name }}
+          path: ${{ steps.package.outputs.icpx_path }}
+          if-no-files-found: error
+
+      - name: Determine Release Tag
+        id: release_decision
+        working-directory: ICC-CE-ENBX
+        shell: pwsh
+        run: |
+          $shouldRelease = $false
+          $releaseTag = ""
+
+          if ("${{ github.ref }}".StartsWith("refs/tags/v")) {
+            $shouldRelease = $true
+            $releaseTag = "${{ github.ref_name }}"
+          } elseif ("${{ inputs.create_release }}" -eq "true") {
+            $shouldRelease = $true
+            $releaseTag = "v${{ steps.package.outputs.version }}"
+          }
+
+          "should_release=$shouldRelease" >> $env:GITHUB_OUTPUT
+          "release_tag=$releaseTag" >> $env:GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        if: steps.release_decision.outputs.should_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_decision.outputs.release_tag }}
+          name: ICC-CE-ENBX ${{ steps.release_decision.outputs.release_tag }}
+          files: ${{ steps.package.outputs.icpx_path }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## ICC-CE ENBX 插件 ${{ steps.release_decision.outputs.release_tag }}
+
+            ### 安装方法
+            1. 下载下方的 `${{ steps.package.outputs.icpx_name }}` 文件；
+            2. 将其放入 ICC-CE 的 `PluginPackages/` 目录；
+            3. 重启 ICC-CE 即可自动加载并安装该插件。
+
+            ### 校验信息 (SHA256)
+            ```
+            ${{ steps.package.outputs.sha256 }}  ${{ steps.package.outputs.icpx_name }}
+            ```

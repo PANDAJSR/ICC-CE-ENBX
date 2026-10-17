@@ -94,6 +94,12 @@ The generated package is `icpx/com.pandajsr.icc-ce-enbx.icpx`. The current host 
 
 WebEasiNote is built first and its `dist` files are embedded into `ICC.CE.ENBX.dll` as resources. After changing WebEasiNote, run `build-plugin.ps1` again; do not copy only the old `.icpx` package.
 
+### CI 自动构建与产物下载
+
+仓库已配置 GitHub Actions 自动化构建流水线：
+- **每次 Push / PR / 手动触发 (workflow_dispatch)**：流水线会自动拉取前端 `WebEasiNote` 编译后打包为 `.icpx`，并在对应的 Action 运行记录下方提供 **Artifacts** 直接下载。
+- **Release 发布**：推送版本 tag（例如 `v0.1.0`）或在 Actions 中手动触发选择发布时，会自动生成 GitHub Release 并将 `.icpx` 包及 SHA256 校验和附加至 Release Assets 中。
+
 ## Compatibility note
 
 ICC-CE does not currently expose the Tools menu as a public plugin SDK extension point. `ToolsMenuBridge` is isolated compatibility code that locates the existing `ToolsPopupContent.OpenBtn` and swaps its `ButtonMouseUp` handler. It should be replaced with an official SDK menu API if one is added later.
