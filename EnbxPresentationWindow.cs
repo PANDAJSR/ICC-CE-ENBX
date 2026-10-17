@@ -65,6 +65,7 @@ internal sealed class EnbxPresentationWindow : IDisposable
     private readonly EnbxWebViewLayer _layer;
     private Window? _window;
     private Window? _host;
+    private System.Windows.Threading.DispatcherTimer? _anchorTimer;
     private bool _allowClose;
     private bool _disposed;
 
@@ -100,6 +101,7 @@ internal sealed class EnbxPresentationWindow : IDisposable
             _window.SourceInitialized += OnWindowSourceInitialized;
             _window.PreviewKeyDown += OnWindowPreviewKeyDown;
             _window.LocationChanged += OnWindowLocationChanged;
+            _window.Activated += (s, e) => Anchor();
             _window.Show();
             ApplyNoActivateStyle();
         }
@@ -123,10 +125,21 @@ internal sealed class EnbxPresentationWindow : IDisposable
         UpdateBounds();
         _window.UpdateLayout();
         Anchor();
+
+        if (_anchorTimer == null)
+        {
+            _anchorTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(1)
+            };
+            _anchorTimer.Tick += (s, e) => Anchor();
+        }
+        _anchorTimer.Start();
     }
 
     public void Hide()
     {
+        _anchorTimer?.Stop();
         DetachHost();
         _window?.Hide();
     }
@@ -180,10 +193,18 @@ internal sealed class EnbxPresentationWindow : IDisposable
         if (msg == WmWindowPosChanging)
         {
             var pos = Marshal.PtrToStructure<WINDOWPOS>(lParam);
-            // 确保本窗口永远保持非置顶（不能插入到 HWND_TOPMOST 或被提升为 TOPMOST）
+            // 确保本窗口绝不插入到 HWND_TOPMOST 或覆盖在宿主上方
             if (pos.hwndInsertAfter == HwndTopMost)
             {
-                pos.hwndInsertAfter = HwndNotTopMost;
+                var hostHandle = _host != null ? new WindowInteropHelper(_host).Handle : IntPtr.Zero;
+                if (hostHandle != IntPtr.Zero)
+                {
+                    pos.hwndInsertAfter = hostHandle;
+                }
+                else
+                {
+                    pos.flags |= SwpNoZOrder;
+                }
                 Marshal.StructureToPtr(pos, lParam, false);
             }
         }
@@ -344,6 +365,13 @@ internal sealed class EnbxPresentationWindow : IDisposable
             HwndTopMost,
             0, 0, 0, 0,
             SwpNoMove | SwpNoSize | SwpNoActivate);
+
+        // 4. 将本窗口紧随定位在 host 之后
+        SetWindowPos(
+            handle,
+            hostHandle,
+            0, 0, 0, 0,
+            SwpNoMove | SwpNoSize | SwpNoActivate);
     }
 
     private void OnWindowPreviewKeyDown(object? sender, System.Windows.Input.KeyEventArgs e)
@@ -357,6 +385,18 @@ internal sealed class EnbxPresentationWindow : IDisposable
     private void TryUnregisterFromHostTopmostManager()
     {
         if (_window == null || _host == null) return;
+
+        try
+        {
+            var windows = Application.Current?.Windows;
+            if (windows != null)
+            {
+                var remove = windows.GetType().GetMethod("Remove", BindingFlags.Instance | BindingFlags.NonPublic);
+                remove?.Invoke(windows, new object[] { _window });
+            }
+        }
+        catch { }
+
         try
         {
             var wtmType = _host.GetType().Assembly.GetType("Ink_Canvas.Helpers.WindowTopmostManager");
@@ -406,6 +446,8 @@ internal sealed class EnbxPresentationWindow : IDisposable
         if (_disposed) return;
         _disposed = true;
 
+        _anchorTimer?.Stop();
+        _anchorTimer = null;
         DetachHost();
         if (_window != null)
         {
