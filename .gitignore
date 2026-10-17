@@ -2,3 +2,7 @@ bin/
 obj/
 icpx/
 .probe/
+node_modules/
+.env
+scripts/*.exe
+

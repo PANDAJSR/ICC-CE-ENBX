@@ -36,10 +36,58 @@ Key entries to look for:
 | `Host navigation requested: ...` / `enbx:navigation-complete` | Host navigation bar drove a page change |
 | `Host ended presentation source ...` / `Ending ENBX presentation` | Presentation ended, host state restored |
 
-## Build
+## Development
+
+### 1. 配置宿主路径（.env）
+
+在项目根目录的 `.env` 中指定 ICC-CE 本体仓库路径（支持相对路径或绝对路径）：
+
+```env
+# ICC-CE 本体仓库路径
+ICC_CE_PATH=../iccce
+
+# WebEasiNote 前端仓库路径（可选，默认 ../WebEasiNote）
+WEB_EASINOTE_PATH=../WebEasiNote
+
+# 编译配置（可选：Debug 或 Release，默认 Debug）
+BUILD_CONFIGURATION=Debug
+
+# 启用 WebView2 前端 DevTools（按 F12 或 Ctrl+Shift+I 唤起，默认 1）
+ICC_CE_ENBX_DEVTOOLS=1
+
+# 宿主启动参数（默认 --show 展开浮动工具栏；可选 --board 直接进入全屏白板）
+HOST_ARGS=--show
+
+# 启动时自动打开的测试课件（可选，支持相对路径或绝对路径）
+# ENBX_FILE=./test.enbx
+```
+
+### 2. 一键编译并带插件启动宿主
+
+```bash
+pnpm dev
+```
+
+该命令会自动：
+1. 编译 WebEasiNote 前端并生成最新的静态资源（`dist/`）；
+2. 编译插件项目 `ICC.CE.ENBX.csproj`；
+3. 编译 ICC-CE 本体项目 `InkCanvasForClass.csproj`；
+4. 将编译好的插件产物自动同步至本体的 `Plugins/com.pandajsr.icc-ce-enbx/` 目录；
+5. 自动将插件添加到宿主信任列表，避免权限确认弹窗阻塞 UI 消息泵；
+6. 携带 `--show` 启动 ICC-CE 本体，展开桌面浮动工具栏，并加载该插件。可在工具栏点击【工具】->【打开】选择并播放 ENBX 课件。
+
+### 3. 仅编译与部署（不启动）
+
+```bash
+pnpm build
+```
+
+## Build Plugin Package (.icpx)
 
 ```powershell
 .\build-plugin.ps1
+# 或使用:
+pnpm build:plugin
 ```
 
 The generated package is `icpx/com.pandajsr.icc-ce-enbx.icpx`. The current host must be restarted before it scans the installed plugin directory. WebView2 Runtime is required.

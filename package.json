@@ -1,0 +1,21 @@
+{
+  "name": "icc-ce-enbx",
+  "version": "0.1.0",
+  "description": "ICC-CE ENBX presentation plugin",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:host": "node scripts/dev.mjs --no-plugin",
+    "build": "node scripts/build.mjs",
+    "build:plugin": "powershell -ExecutionPolicy Bypass -File ./build-plugin.ps1"
+  },
+  "keywords": [
+    "icc-ce",
+    "enbx",
+    "plugin",
+    "presentation"
+  ],
+  "author": "PANDA-JSR",
+  "license": "AGPL-3.0-only"
+}
