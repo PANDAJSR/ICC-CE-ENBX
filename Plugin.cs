@@ -4,7 +4,11 @@ using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Ink_Canvas.Plugins;
+using ICC.CE.ENBX.Seewo.Models;
+using ICC.CE.ENBX.Seewo.Services;
+using ICC.CE.ENBX.Seewo.UI;
 
 namespace ICC.CE.ENBX;
 
@@ -32,6 +36,10 @@ public sealed class Plugin : PluginBase
     private Visibility _savedBackgroundCoverVisibility;
     private bool _savedTopMost;
     private bool _hostOverlayApplied;
+    private SeewoAuthManager? _seewoAuthManager;
+    private SeewoApiClient? _seewoApiClient;
+    private SeewoDownloader? _seewoDownloader;
+    private SeewoCloudWindow? _seewoCloudWindow;
 
     public override string Id => PluginId;
     public override string Name => "希沃白板播放器";
@@ -79,6 +87,26 @@ public sealed class Plugin : PluginBase
             _ = OpenFileAsync(path);
             return true;
         });
+        uriService?.RegisterHandler("seewo", _ =>
+        {
+            OpenSeewoCloudWindow();
+            return true;
+        });
+
+        // 初始化希沃云课件服务与工具栏组件
+        _seewoAuthManager = new SeewoAuthManager(PluginConfigFolder);
+        var logFilePath = Path.Combine(PluginConfigFolder, "seewo_cloud.log");
+        _seewoApiClient = new SeewoApiClient(_seewoAuthManager, msg =>
+        {
+            try
+            {
+                _host?.Log("[Seewo] " + msg);
+                File.AppendAllText(logFilePath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {msg}{Environment.NewLine}");
+            }
+            catch { }
+        });
+        _seewoDownloader = new SeewoDownloader(_seewoApiClient, PluginConfigFolder);
+        RegisterSeewoToolbarItem(host);
 
         host.Log("ENBX presentation plugin initialized.");
     }
@@ -106,11 +134,239 @@ public sealed class Plugin : PluginBase
             if (_presentation != null) _presentation.Ended -= OnPresentationEnded;
             _webView?.Dispose();
             _presentationWindow?.Dispose();
+            Application.Current?.Dispatcher?.Invoke(() =>
+            {
+                try { _seewoCloudWindow?.Close(); } catch { }
+                _seewoCloudWindow = null;
+            });
         }
         catch (Exception ex)
         {
             _host?.LogError("Failed to shut down the ENBX presentation plugin.", ex);
         }
+    }
+
+    public void OpenSeewoCloudWindow()
+    {
+        Application.Current?.Dispatcher?.Invoke(() =>
+        {
+            if (_seewoAuthManager == null || _seewoApiClient == null || _seewoDownloader == null)
+                return;
+
+            if (_seewoCloudWindow == null || !_seewoCloudWindow.IsLoaded)
+            {
+                _seewoCloudWindow = new SeewoCloudWindow(this, _seewoAuthManager, _seewoApiClient, _seewoDownloader);
+                _seewoCloudWindow.Closed += (_, _) => _seewoCloudWindow = null;
+                _seewoCloudWindow.Show();
+            }
+            else
+            {
+                if (_seewoCloudWindow.WindowState == WindowState.Minimized)
+                    _seewoCloudWindow.WindowState = WindowState.Normal;
+                _seewoCloudWindow.Activate();
+                _seewoCloudWindow.Focus();
+            }
+        });
+    }
+
+    private void RegisterSeewoToolbarItem(IPluginHost host)
+    {
+        try
+        {
+            // 预先写入 .toolbar_registered 标记，确保宿主判定为非首次安装，绝不自动追加到工具栏，满足用户“手动添加”需求
+            try
+            {
+                var folder = !string.IsNullOrEmpty(PluginFolder) ? PluginFolder : PluginConfigFolder;
+                var markerPath = Path.Combine(folder, ".toolbar_registered");
+                if (!File.Exists(markerPath))
+                {
+                    File.WriteAllText(markerPath, "");
+                }
+            }
+            catch { }
+
+            // 注册浮动工具栏项（需用户手动添加）
+            var floatingItem = new PluginToolbarItemInfo
+            {
+                Id = "com.pandajsr.icc-ce-enbx.seewo",
+                DisplayName = "希沃",
+                Description = "浏览并下载播放希沃云课件",
+                Surface = PluginToolbarSurface.Floating,
+                ViewFactory = () => CreateSeewoToolbarButton(isBoard: false)
+            };
+            SetAutoAddToActiveConfig(floatingItem, false);
+            host.RegisterToolbarItem(floatingItem);
+
+            // 注册白板工具栏项（需用户手动添加）
+            var boardItem = new PluginToolbarItemInfo
+            {
+                Id = "com.pandajsr.icc-ce-enbx.seewo.board",
+                DisplayName = "希沃",
+                Description = "浏览并下载播放希沃云课件",
+                Surface = PluginToolbarSurface.Whiteboard,
+                ViewFactory = () => CreateSeewoToolbarButton(isBoard: true)
+            };
+            SetAutoAddToActiveConfig(boardItem, false);
+            host.RegisterBoardToolbarItem(boardItem);
+
+            host.Log("ENBX 希沃工具栏组件已成功注册（需用户手动添加）。");
+        }
+        catch (Exception ex)
+        {
+            host.LogError("注册希沃工具栏组件失败", ex);
+        }
+    }
+
+    private static void SetAutoAddToActiveConfig(PluginToolbarItemInfo itemInfo, bool value)
+    {
+        try
+        {
+            var prop = itemInfo.GetType().GetProperty("AutoAddToActiveConfig");
+            prop?.SetValue(itemInfo, value);
+        }
+        catch { }
+    }
+
+    private FrameworkElement CreateSeewoToolbarButton(bool isBoard)
+    {
+        var border = new Border
+        {
+            CornerRadius = new CornerRadius(4),
+            Background = Brushes.Transparent,
+            Margin = isBoard ? new Thickness(0) : new Thickness(0, 2, 0, 7),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            ToolTip = "希沃云课件"
+        };
+
+        var grid = new Grid
+        {
+            Width = isBoard ? 60 : 44,
+            Height = isBoard ? 50 : 43,
+            Background = Brushes.Transparent
+        };
+
+        var hoverOverlay = new Border
+        {
+            CornerRadius = new CornerRadius(4),
+            Background = Brushes.Transparent,
+            IsHitTestVisible = false
+        };
+
+        var contentGrid = new Grid
+        {
+            Margin = isBoard ? new Thickness(0, 6, 0, 4) : new Thickness(0)
+        };
+
+        var img = new Image
+        {
+            Width = isBoard ? 20 : 24,
+            Height = isBoard ? 20 : 24,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = isBoard ? new Thickness(0) : new Thickness(0, 1, 0, 0),
+            Stretch = Stretch.Uniform
+        };
+        RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
+        img.Source = LoadSeewoIconBitmap();
+
+        var label = new TextBlock
+        {
+            Text = "希沃",
+            FontSize = isBoard ? 12 : 13,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Margin = isBoard ? new Thickness(0) : new Thickness(0, 0, 0, 2),
+            TextAlignment = TextAlignment.Center
+        };
+
+        try
+        {
+            label.SetResourceReference(TextBlock.ForegroundProperty, isBoard ? "FloatingBarForegroundBrush" : "FloatBarForeground");
+        }
+        catch
+        {
+        }
+
+        contentGrid.Children.Add(img);
+        contentGrid.Children.Add(label);
+
+        grid.Children.Add(hoverOverlay);
+        grid.Children.Add(contentGrid);
+        border.Child = grid;
+
+        bool isPressed = false;
+
+        border.MouseEnter += (_, _) =>
+        {
+            if (!isPressed)
+                hoverOverlay.Background = new SolidColorBrush(Color.FromArgb(24, 128, 128, 128));
+        };
+
+        border.MouseLeave += (_, _) =>
+        {
+            isPressed = false;
+            hoverOverlay.Background = Brushes.Transparent;
+        };
+
+        border.MouseLeftButtonDown += (_, e) =>
+        {
+            isPressed = true;
+            hoverOverlay.Background = new SolidColorBrush(Color.FromArgb(48, 128, 128, 128));
+            e.Handled = true;
+        };
+
+        border.MouseLeftButtonUp += (_, e) =>
+        {
+            if (isPressed)
+            {
+                isPressed = false;
+                hoverOverlay.Background = new SolidColorBrush(Color.FromArgb(24, 128, 128, 128));
+                OpenSeewoCloudWindow();
+                e.Handled = true;
+            }
+        };
+
+        return border;
+    }
+
+    private ImageSource? LoadSeewoIconBitmap()
+    {
+        try
+        {
+            // 优先从嵌入资源/Pack URI 加载
+            var uri = new Uri("pack://application:,,,/ICC.CE.ENBX;component/Resources/seewo_icon.png", UriKind.Absolute);
+            return new BitmapImage(uri);
+        }
+        catch
+        {
+            try
+            {
+                var searchPaths = new[]
+                {
+                    Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? "", "Resources", "seewo_icon.png"),
+                    Path.Combine(PluginFolder ?? "", "Resources", "seewo_icon.png"),
+                    Path.Combine(PluginConfigFolder ?? "", "Resources", "seewo_icon.png")
+                };
+
+                foreach (var path in searchPaths)
+                {
+                    if (File.Exists(path))
+                    {
+                        var bitmap = new BitmapImage();
+                        bitmap.BeginInit();
+                        bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                        bitmap.UriSource = new Uri(path, UriKind.Absolute);
+                        bitmap.EndInit();
+                        bitmap.Freeze();
+                        return bitmap;
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+        return null;
     }
 
     internal async Task OpenFromMenuAsync()
@@ -186,7 +442,7 @@ public sealed class Plugin : PluginBase
         }
     }
 
-    private async Task OpenFileAsync(string path)
+    public async Task OpenFileAsync(string path)
     {
         if (!File.Exists(path))
         {

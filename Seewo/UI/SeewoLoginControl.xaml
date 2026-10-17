@@ -1,0 +1,53 @@
+<UserControl x:Class="ICC.CE.ENBX.Seewo.UI.SeewoLoginControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+             xmlns:ui="http://schemas.inkore.net/lib/ui/wpf/modern"
+             mc:Ignorable="d" 
+             d:DesignHeight="600" d:DesignWidth="800"
+             Background="{DynamicResource SystemControlPageBackgroundAltHighBrush}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- 顶部提示横条 -->
+        <Border Grid.Row="0" Background="#F0F5FF" BorderBrush="#ADC6FF" BorderThickness="0,0,0,1" Padding="16,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Image Grid.Column="0" Source="pack://application:,,,/ICC.CE.ENBX;component/Resources/seewo_icon.png" 
+                       Width="24" Height="24" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="请在下方登录希沃账号" FontWeight="SemiBold" FontSize="14" Foreground="#1D39C4"/>
+                    <TextBlock Text="登录成功后将自动获取云端课件并持久保存登录态。支持验证码、密码或微信扫码。" 
+                               FontSize="12" Foreground="#595959" Margin="0,2,0,0"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="刷新登录页" Click="OnRefreshLoginClick" Margin="0,0,8,0" Padding="10,4"/>
+                    <Button Content="清除缓存重新载入" Click="OnClearAndReloadClick" Padding="10,4"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- WebView2 容器 -->
+        <Grid Grid.Row="1">
+            <wv2:WebView2 x:Name="LoginWebView" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+
+            <!-- 加载中遮罩 -->
+            <Border x:Name="LoadingOverlay" Background="#99FFFFFF" Visibility="Visible">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <ui:ProgressRing IsActive="True" Width="42" Height="42"/>
+                    <TextBlock x:Name="LoadingText" Text="正在加载希沃认证中心..." Margin="0,14,0,0" 
+                               FontSize="13" Foreground="#333333" HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>
