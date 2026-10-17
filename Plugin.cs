@@ -34,10 +34,15 @@ public sealed class Plugin : PluginBase
     private bool _hostOverlayApplied;
 
     public override string Id => PluginId;
-    public override string Name => "ENBX Presentation";
+    public override string Name => "希沃白板播放器";
     public override string Version => "0.1.0";
     public override string Description => "Play ENBX courseware and import MAXHUB MHB whiteboard files in ICC-CE.";
     public override string Author => "PANDA-JSR";
+
+    private PluginSettings? _settings;
+    private PluginSettingsControl? _settingsControl;
+
+    public PluginSettings Settings => _settings ??= PluginSettings.Load(PluginConfigFolder);
 
     public override void Initialize(IPluginHost host)
     {
@@ -50,7 +55,9 @@ public sealed class Plugin : PluginBase
         if (_presentation == null || _fileDialog == null)
             throw new InvalidOperationException("The host does not provide the ENBX presentation services.");
 
+        _settings = PluginSettings.Load(PluginConfigFolder);
         _webView = new EnbxWebViewLayer();
+        _webView.CurrentSettings = _settings;
         _webView.MessageReceived += OnWebMessageReceived;
         _webView.LoadFailed += OnWebViewLoadFailed;
         _webView.Diagnostic += message => _host?.Log("[WebView] " + message);
@@ -77,6 +84,18 @@ public sealed class Plugin : PluginBase
     }
 
     public override object? GetMainView() => null;
+
+    public override object? GetSettingsView() => _settingsControl ??= new PluginSettingsControl(this);
+
+    public void SaveSettings()
+    {
+        _settings?.Save(PluginConfigFolder);
+        if (_settings != null && _webView != null)
+        {
+            _webView.CurrentSettings = _settings;
+            _webView.UpdateSettings(_settings);
+        }
+    }
 
     public override void Shutdown()
     {

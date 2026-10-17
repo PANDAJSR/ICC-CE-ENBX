@@ -1,6 +1,6 @@
 {
   "Id": "com.pandajsr.icc-ce-enbx",
-  "Name": "ENBX Presentation",
+  "Name": "希沃白板播放器",
   "Version": "0.1.0",
   "Description": "Play ENBX courseware and import MAXHUB MHB whiteboard files in ICC-CE.",
   "Author": "PANDA-JSR",

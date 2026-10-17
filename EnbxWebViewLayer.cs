@@ -66,6 +66,28 @@ public sealed class EnbxWebViewLayer : Grid, IDisposable
             Post(new { type = "enbx:toggle-thumbnails", side = side == "right" ? "right" : "left" })));
     }
 
+    public void UpdateSettings(PluginSettings settings)
+    {
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            Post(new
+            {
+                type = "enbx:update-settings",
+                clickToNextEnabled = settings.ClickToNextEnabled,
+                swipeNavigationEnabled = settings.SwipeNavigationEnabled
+            });
+            try
+            {
+                if (_isReady && !_disposed && _webView.CoreWebView2 != null)
+                {
+                    var script = $"try {{ localStorage.setItem('webeasinote:clickToNextEnabled', '{(settings.ClickToNextEnabled ? "1" : "0")}'); localStorage.setItem('webeasinote:swipeNavigationEnabled', '{(settings.SwipeNavigationEnabled ? "1" : "0")}'); }} catch(e) {{}}";
+                    _webView.CoreWebView2.ExecuteScriptAsync(script);
+                }
+            }
+            catch { }
+        }));
+    }
+
     public void SetViewerVisible(bool visible)
         => Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
 
@@ -268,9 +290,15 @@ public sealed class EnbxWebViewLayer : Grid, IDisposable
         return resourceName == null ? null : assembly.GetManifestResourceStream(resourceName);
     }
 
+    public PluginSettings? CurrentSettings { get; set; }
+
     private void PostOpenDocument()
     {
         if (_documentPath == null || _documentToken == null) return;
+        if (CurrentSettings != null)
+        {
+            UpdateSettings(CurrentSettings);
+        }
         Post(new
         {
             type = "enbx:open",

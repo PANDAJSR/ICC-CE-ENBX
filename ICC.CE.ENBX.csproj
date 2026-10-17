@@ -17,6 +17,7 @@
     <PackageReference Include="InkCanvas.PluginSdk" Version="1.8.0.2-gbd4880718d">
       <Private>false</Private>
     </PackageReference>
+    <PackageReference Include="iNKORE.UI.WPF.Modern" Version="0.10.2.1" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
   </ItemGroup>
 
