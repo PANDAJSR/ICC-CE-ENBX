@@ -389,6 +389,9 @@ public sealed class EnbxWebViewLayer : Grid, IDisposable
             ".jpg" or ".jpeg" => "image/jpeg",
             ".woff" => "font/woff",
             ".woff2" => "font/woff2",
+            // Ruffle 运行时（Flash 播放）依赖 wasm，需走流式编译
+            ".wasm" => "application/wasm",
+            ".swf" => "application/x-shockwave-flash",
             _ => "application/octet-stream"
         };
 
