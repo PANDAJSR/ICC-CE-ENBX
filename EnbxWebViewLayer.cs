@@ -7,7 +7,7 @@ using Microsoft.Web.WebView2.Wpf;
 
 namespace ICC.CE.ENBX;
 
-public sealed class EnbxWebViewLayer : Grid, IDisposable
+public sealed partial class EnbxWebViewLayer : Grid, IDisposable
 {
     private const string AppOrigin = "https://enbx.local";
     private const string AppPath = "/WebEasiNote";
@@ -48,6 +48,7 @@ public sealed class EnbxWebViewLayer : Grid, IDisposable
 
     public void OpenDocument(string path)
     {
+        CloseCloudDocument();
         _documentPath = Path.GetFullPath(path);
         _documentToken = Guid.NewGuid().ToString("N");
         SetViewerVisible(true);
@@ -225,6 +226,11 @@ public sealed class EnbxWebViewLayer : Grid, IDisposable
 
     private void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
     {
+        if (new Uri(e.Request.Uri).AbsolutePath.StartsWith("/courseware/", StringComparison.Ordinal))
+        {
+            HandleCloudResource(e);
+            return;
+        }
         try
         {
             var uri = new Uri(e.Request.Uri);
@@ -294,6 +300,13 @@ public sealed class EnbxWebViewLayer : Grid, IDisposable
 
     private void PostOpenDocument()
     {
+        if (_cloudSession != null)
+        {
+            if (CurrentSettings != null) UpdateSettings(CurrentSettings);
+            Post(new { type = "enbx:open", sourceKind = "http-manifest", protocolVersion = 1,
+                sessionId = _cloudSession.Id, manifestUrl = AppOrigin + "/courseware/" + _cloudSession.Id + "/manifest.json" });
+            return;
+        }
         if (_documentPath == null || _documentToken == null) return;
         if (CurrentSettings != null)
         {
@@ -387,6 +400,15 @@ public sealed class EnbxWebViewLayer : Grid, IDisposable
             ".svg" => "image/svg+xml",
             ".png" => "image/png",
             ".jpg" or ".jpeg" => "image/jpeg",
+            ".gif" => "image/gif",
+            ".bmp" => "image/bmp",
+            ".webp" => "image/webp",
+            ".mp4" or ".m4v" => "video/mp4",
+            ".webm" => "video/webm",
+            ".mp3" => "audio/mpeg",
+            ".wav" => "audio/wav",
+            ".ogg" => "audio/ogg",
+            ".xml" => "application/xml; charset=utf-8",
             ".woff" => "font/woff",
             ".woff2" => "font/woff2",
             // Ruffle 运行时（Flash 播放）依赖 wasm，需走流式编译
@@ -399,6 +421,7 @@ public sealed class EnbxWebViewLayer : Grid, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        CloseCloudDocument();
         if (_webView.CoreWebView2 != null)
         {
             _webView.CoreWebView2.WebMessageReceived -= OnWebMessageReceived;

@@ -66,7 +66,7 @@ public sealed class SeewoAuthManager
                 {
                     _accounts.Add(_currentProfile);
                     Persist();
-                    WithHostWriteAccess(_configDirectory, () => File.Delete(_authFilePath));
+                    WithHostWriteAccess(_authFilePath, () => File.Delete(_authFilePath));
                 }
             }
         }
@@ -84,6 +84,10 @@ public sealed class SeewoAuthManager
         {
             profile.AccountId = existing.AccountId;
             profile.Remark = existing.Remark;
+            profile.UseCount = existing.UseCount;
+            PreserveUserInfo(profile, existing);
+            if (string.IsNullOrWhiteSpace(profile.StageName)) profile.StageName = existing.StageName;
+            if (string.IsNullOrWhiteSpace(profile.SubjectName)) profile.SubjectName = existing.SubjectName;
             _accounts.Remove(existing);
         }
         if (!_accounts.Contains(profile)) _accounts.Add(profile);
@@ -100,6 +104,10 @@ public sealed class SeewoAuthManager
             foreach (var duplicate in _accounts.Where(x => !ReferenceEquals(x, profile) && x.Uid == profile.Uid).ToList())
             {
                 if (string.IsNullOrWhiteSpace(profile.Remark)) profile.Remark = duplicate.Remark;
+                profile.UseCount = Math.Max(profile.UseCount, duplicate.UseCount);
+                PreserveUserInfo(profile, duplicate);
+                if (string.IsNullOrWhiteSpace(profile.StageName)) profile.StageName = duplicate.StageName;
+                if (string.IsNullOrWhiteSpace(profile.SubjectName)) profile.SubjectName = duplicate.SubjectName;
                 if (ReferenceEquals(_currentProfile, duplicate)) _currentProfile = profile;
                 _accounts.Remove(duplicate);
             }
@@ -113,16 +121,28 @@ public sealed class SeewoAuthManager
         if (!_accounts.Contains(profile)) throw new InvalidOperationException("账号不存在");
         var previous = _currentProfile;
         var previousTime = profile.LastUsedTime;
+        var previousCount = profile.UseCount;
         profile.LastUsedTime = DateTime.UtcNow;
+        profile.UseCount++;
         _currentProfile = profile;
         try { Persist(); }
         catch
         {
             _currentProfile = previous;
             profile.LastUsedTime = previousTime;
+            profile.UseCount = previousCount;
             throw;
         }
         AuthStateChanged?.Invoke(profile);
+    }
+
+    private static void PreserveUserInfo(SeewoAuthProfile target, SeewoAuthProfile previous)
+    {
+        // Cookie 登录结果通常不含头像，更新凭证时不能清空已有用户资料。
+        if (string.IsNullOrWhiteSpace(target.AvatarUrl)) target.AvatarUrl = previous.AvatarUrl;
+        if (string.IsNullOrWhiteSpace(target.NickName)) target.NickName = previous.NickName;
+        if (string.IsNullOrWhiteSpace(target.UserName)) target.UserName = previous.UserName;
+        if (string.IsNullOrWhiteSpace(target.Phone)) target.Phone = previous.Phone;
     }
 
     public void Remove(SeewoAuthProfile profile)
@@ -137,7 +157,7 @@ public sealed class SeewoAuthManager
     {
         lock (StorageLock)
         {
-            WithHostWriteAccess(_configDirectory, PersistCore);
+            WithHostWriteAccess(AccountsPath, PersistCore);
         }
     }
 

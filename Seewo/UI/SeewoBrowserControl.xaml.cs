@@ -22,6 +22,8 @@ public partial class SeewoBrowserControl : UserControl
     private readonly HashSet<string> _downloadingIds = new(StringComparer.OrdinalIgnoreCase);
 
     public event Action<string>? PlayRequested;
+    public Func<SeewoCoursewareItem, Task>? CloudPlayRequested { get; set; }
+    public Func<bool>? UseCloudLazyLoading { get; set; }
     public bool IsDownloading => _downloadingIds.Count > 0;
     private bool _detached;
 
@@ -242,6 +244,19 @@ public partial class SeewoBrowserControl : UserControl
         // 若已在下载队列中，避免重复触发
         if (_downloadingIds.Contains(item.Id))
         {
+            return;
+        }
+
+        if (autoPlay && UseCloudLazyLoading?.Invoke() == true && CloudPlayRequested != null)
+        {
+            _downloadingIds.Add(item.Id);
+            try { await CloudPlayRequested(item); }
+            catch (Exception ex)
+            {
+                _apiClient.Log("Cloud playback failed: " + ex.GetType().Name);
+                MessageBox.Show($"打开云课件失败: {ex.Message}", "播放错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally { _downloadingIds.Remove(item.Id); }
             return;
         }
 

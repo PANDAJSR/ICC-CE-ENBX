@@ -116,6 +116,25 @@ public sealed class SeewoApiClient
                     if (root.TryGetProperty("data", out var dProp) && dProp.ValueKind == JsonValueKind.Object)
                         targetObj = dProp;
 
+                    static string ReadLabel(JsonElement obj, params string[] names)
+                    {
+                        if (obj.ValueKind != JsonValueKind.Object) return string.Empty;
+                        foreach (var key in names)
+                        {
+                            if (!obj.TryGetProperty(key, out var value)) continue;
+                            if (value.ValueKind == JsonValueKind.String) return value.GetString() ?? string.Empty;
+                            if (value.ValueKind == JsonValueKind.Object && value.TryGetProperty("name", out var label) && label.ValueKind == JsonValueKind.String) return label.GetString() ?? string.Empty;
+                        }
+                        return string.Empty;
+                    }
+                    var stage = ReadLabel(targetObj, "stageName", "schoolStageName", "phaseName", "stage");
+                    var subject = ReadLabel(targetObj, "subjectName", "subject");
+                    if (targetObj.TryGetProperty("userInfoExtendVo", out var teaching))
+                    {
+                        if (string.IsNullOrWhiteSpace(stage)) stage = ReadLabel(teaching, "stageName", "schoolStageName", "phaseName", "stage");
+                        if (string.IsNullOrWhiteSpace(subject)) subject = ReadLabel(teaching, "subjectName", "subject");
+                    }
+
                     string? avatar = null;
                     if (targetObj.TryGetProperty("photoUrl", out var p1) || 
                         targetObj.TryGetProperty("avatar", out p1) || 
@@ -144,8 +163,10 @@ public sealed class SeewoApiClient
                     if (targetObj.TryGetProperty("uid", out var u1))
                         uid = u1.ToString();
 
-                    if (!string.IsNullOrWhiteSpace(avatar) || !string.IsNullOrWhiteSpace(name) || !string.IsNullOrWhiteSpace(uid))
+                    if (!string.IsNullOrWhiteSpace(avatar) || !string.IsNullOrWhiteSpace(name) || !string.IsNullOrWhiteSpace(uid) || !string.IsNullOrWhiteSpace(stage) || !string.IsNullOrWhiteSpace(subject))
                     {
+                        if (!string.IsNullOrWhiteSpace(stage)) profile.StageName = stage;
+                        if (!string.IsNullOrWhiteSpace(subject)) profile.SubjectName = subject;
                         if (!string.IsNullOrWhiteSpace(avatar)) profile.AvatarUrl = avatar;
                         if (!string.IsNullOrWhiteSpace(name)) profile.NickName = name;
                         if (!string.IsNullOrWhiteSpace(uid)) profile.Uid = uid;

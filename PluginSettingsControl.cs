@@ -71,6 +71,23 @@ public sealed class PluginSettingsControl : UserControl
         cardSwipe.Content = _swipeNavigationSwitch;
         stackPanel.Children.Add(cardSwipe);
 
+        var lazySwitch = new ModernControls.ToggleSwitch
+        {
+            IsOn = _plugin.Settings.CloudLazyLoadingEnabled
+        };
+        lazySwitch.Toggled += (_, _) =>
+        {
+            _plugin.Settings.CloudLazyLoadingEnabled = lazySwitch.IsOn;
+            _plugin.SaveSettings();
+        };
+        stackPanel.Children.Add(new ModernControls.SettingsCard
+        {
+            Header = "云课件懒加载",
+            Description = "先显示当前页，其他页面和图片按需加载。下次打开云课件时生效；关闭后先完整下载再播放。",
+            Content = lazySwitch,
+            Margin = new Thickness(0, 0, 0, 4)
+        });
+
         rootGrid.Children.Add(stackPanel);
         Content = rootGrid;
     }

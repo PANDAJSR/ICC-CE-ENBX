@@ -12,6 +12,7 @@ public sealed class PluginSettings
 
     public bool ClickToNextEnabled { get; set; } = true;
     public bool SwipeNavigationEnabled { get; set; } = true;
+    public bool CloudLazyLoadingEnabled { get; set; } = true;
 
     public static PluginSettings Load(string folder)
     {

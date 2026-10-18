@@ -154,11 +154,13 @@ public sealed class SeewoDownloader
                         var computedHash = BitConverter.ToString(md5.Hash!).Replace("-", "").ToLowerInvariant();
 
                         // 若服务端提供了 hash，可进行校验
-                        if (!string.IsNullOrWhiteSpace(file.Hash) &&
+                        if (file.Hash.Length == 32 && file.Hash.All(Uri.IsHexDigit) &&
                             !string.Equals(computedHash, file.Hash, StringComparison.OrdinalIgnoreCase))
                         {
-                            // 如果 MD5 不匹配但有内容，记录或警告
+                            throw new InvalidDataException($"文件 MD5 校验失败: {file.Name}");
                         }
+                        if (file.Size >= 0 && fs.Length != file.Size)
+                            throw new InvalidDataException($"文件长度校验失败: {file.Name}");
                     }
 
                     lock (progressLock)

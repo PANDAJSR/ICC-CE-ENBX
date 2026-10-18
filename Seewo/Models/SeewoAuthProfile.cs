@@ -11,6 +11,9 @@ public sealed class SeewoAuthProfile
 
     public string AccountId { get; set; } = Guid.NewGuid().ToString("N");
     public string Remark { get; set; } = string.Empty;
+    public string StageName { get; set; } = string.Empty;
+    public string SubjectName { get; set; } = string.Empty;
+    public long UseCount { get; set; }
     public bool IsExpired { get; set; }
     public DateTime LastUsedTime { get; set; } = DateTime.UtcNow;
 

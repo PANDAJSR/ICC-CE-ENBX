@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Media.Imaging;
 using System.Windows.Media;
 using ICC.CE.ENBX.Seewo.Models;
@@ -19,6 +20,7 @@ public partial class SeewoCloudWindow : Window
     private SeewoBrowserControl? _browserControl;
     private bool _busy;
     private bool _closed;
+    private int _viewVersion;
 
     public SeewoCloudWindow(
         Plugin plugin,
@@ -90,12 +92,19 @@ public partial class SeewoCloudWindow : Window
         UpdateUserUi();
 
         _browserControl = new SeewoBrowserControl(_apiClient, _downloader);
+        _browserControl.UseCloudLazyLoading = () => _plugin.Settings.CloudLazyLoadingEnabled;
+        _browserControl.CloudPlayRequested = async item =>
+        {
+            await _plugin.OpenCloudCoursewareAsync(item);
+            if (!_closed) WindowState = WindowState.Minimized;
+        };
         _browserControl.PlayRequested += OnPlayRequested;
         MainContentContainer.Children.Add(_browserControl);
     }
 
     private void ClearContent()
     {
+        _viewVersion++;
         _loginControl?.Dispose();
         _loginControl = null;
         if (_browserControl != null)
@@ -221,7 +230,7 @@ public partial class SeewoCloudWindow : Window
     {
         if (!CanChangeAccount()) return;
         var menu = new ContextMenu { MaxHeight = 480 };
-        foreach (var account in _authManager.Accounts.OrderByDescending(x => x.LastUsedTime))
+        foreach (var account in OrderedAccounts())
         {
             var item = new MenuItem
             {
@@ -246,41 +255,99 @@ public partial class SeewoCloudWindow : Window
         menu.IsOpen = true;
     }
 
-    private void ShowAccountManager()
+    private void ShowAccountManager() => ShowAccountManager(true);
+
+    private void ShowAccountManager(bool refreshProfiles)
     {
         if (_closed) return;
         ClearContent();
         UpdateUserUi();
-        var panel = new StackPanel { MaxWidth = 680, Margin = new Thickness(28), HorizontalAlignment = HorizontalAlignment.Stretch };
-        panel.Children.Add(new TextBlock { Text = "希沃账号", FontSize = 24, FontWeight = FontWeights.SemiBold });
-        panel.Children.Add(new TextBlock { Text = "选择账号打开云课件，或添加其他账号。登录信息仅保存在此 Windows 用户下。", Margin = new Thickness(0, 8, 0, 20), TextWrapping = TextWrapping.Wrap });
-        foreach (var account in _authManager.Accounts.OrderByDescending(x => x.LastUsedTime).ToList())
+        var panel = new StackPanel { Width = 440, Margin = new Thickness(24, 40, 24, 40), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        panel.Children.Add(new TextBlock { Text = "希沃账号", FontSize = 28, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 24) });
+        foreach (var account in OrderedAccounts().ToList())
         {
-            var card = new StackPanel { Margin = new Thickness(0, 0, 0, 18) };
-            card.Children.Add(CreateAccountIdentity(account, 44));
-            var actions = new WrapPanel { Margin = new Thickness(56, 8, 0, 0) };
-            void AddAction(string title, Action action)
-            {
-                var button = new Button { Content = title, Padding = new Thickness(12, 6, 12, 6), Margin = new Thickness(0, 0, 8, 4) };
-                button.Click += (_, _) => action();
-                actions.Children.Add(button);
-            }
-            AddAction("使用此账号", () => { _ = SwitchAccountAsync(account); });
-            AddAction("修改备注", () => EditRemark(account));
-            AddAction("重新登录", ShowLoginView);
-            AddAction("从此设备移除", () =>
-            {
-                if (MessageBox.Show($"从此设备移除“{account.DisplayName}”的登录信息？不会删除云端课件。", "移除账号", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-                _authManager.Remove(account);
-                ShowAccountManager();
-            });
+            var card = new Grid { Margin = new Thickness(0, 0, 0, 24) };
+            card.ColumnDefinitions.Add(new ColumnDefinition());
+            card.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            card.Children.Add(CreateAccountIdentity(account, 52));
+            var actions = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            var enterContent = new StackPanel { Orientation = Orientation.Horizontal };
+            enterContent.Children.Add(new TextBlock { Text = "进入", VerticalAlignment = VerticalAlignment.Center });
+            enterContent.Children.Add(CreateIcon("M2,8 L14,8 M9,3 L14,8 L9,13", 16));
+            var enter = new Button { Content = enterContent, Padding = new Thickness(12, 7, 10, 7) };
+            if (ReferenceEquals(account, _authManager.CurrentProfile)) enter.SetResourceReference(StyleProperty, "AccentButtonStyle");
+            enter.Click += async (_, _) => await SwitchAccountAsync(account);
+            actions.Children.Add(enter);
+            var chevron = CreateIcon("M3,5 L8,10 L13,5", 12);
+            chevron.Margin = new Thickness(0);
+            var more = new Button { Content = chevron, Padding = new Thickness(8, 9, 8, 9), Margin = new Thickness(2, 0, 0, 0), ToolTip = "账号选项" };
+            more.Click += (_, _) => ShowAccountActions(account, more);
+            actions.Children.Add(more);
+            Grid.SetColumn(actions, 1);
             card.Children.Add(actions);
             panel.Children.Add(card);
         }
-        var addButton = new Button { Content = "＋ 添加希沃账号", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(16, 8, 16, 8) };
+        var addButton = new Button { Content = "＋ 添加希沃账号", HorizontalAlignment = HorizontalAlignment.Center, Padding = new Thickness(20, 10, 20, 10), Margin = new Thickness(0, 12, 0, 0) };
         addButton.Click += (_, _) => ShowLoginView();
         panel.Children.Add(addButton);
-        MainContentContainer.Children.Add(new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+        MainContentContainer.Children.Add(new ScrollViewer { Content = panel, VerticalContentAlignment = VerticalAlignment.Center, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+        if (refreshProfiles) _ = RefreshAccountListProfilesAsync(_viewVersion);
+    }
+
+    private async Task RefreshAccountListProfilesAsync(int version)
+    {
+        var changed = false;
+        foreach (var account in OrderedAccounts().ToList())
+        {
+            if (_closed || version != _viewVersion) return;
+            try
+            {
+                if (await _apiClient.FetchUserIdentityAsync(account))
+                {
+                    if (_closed || version != _viewVersion) return;
+                    _authManager.UpdateProfile(account);
+                    changed = true;
+                }
+            }
+            catch (Exception ex) { _apiClient.Log($"刷新账号资料失败：{ex.GetType().Name}"); }
+        }
+        if (changed && !_closed && version == _viewVersion) ShowAccountManager(false);
+    }
+
+    private IEnumerable<SeewoAuthProfile> OrderedAccounts() => _authManager.Accounts
+        .OrderByDescending(x => ReferenceEquals(x, _authManager.CurrentProfile))
+        .ThenByDescending(x => x.UseCount).ThenByDescending(x => x.LastUsedTime);
+
+    private static FrameworkElement CreateIcon(string geometry, double size)
+    {
+        var icon = new System.Windows.Shapes.Path { Data = Geometry.Parse(geometry), StrokeThickness = 1.5, Width = size, Height = size, Stretch = Stretch.Uniform, Margin = new Thickness(7, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        icon.SetBinding(System.Windows.Shapes.Shape.StrokeProperty, new System.Windows.Data.Binding("Foreground") { RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor, typeof(Button), 1) });
+        return icon;
+    }
+
+    private void ShowAccountActions(SeewoAuthProfile account, Button target)
+    {
+        var menu = new ContextMenu { PlacementTarget = target };
+        void Add(string title, Action action)
+        {
+            var item = new MenuItem { Header = title };
+            item.Click += (_, _) =>
+            {
+                try { action(); }
+                catch (Exception ex) { _apiClient.Log($"Account action failed: {ex}"); MessageBox.Show(this, ex.Message, "账号操作失败"); }
+            };
+            menu.Items.Add(item);
+        }
+        Add("修改备注", () => EditRemark(account));
+        Add("重新登录", ShowLoginView);
+        if (ReferenceEquals(account, _authManager.CurrentProfile)) Add("退出登录", () => OnLogoutClick(target, new RoutedEventArgs()));
+        Add("从此设备移除", () =>
+        {
+            if (MessageBox.Show(this, $"移除“{account.DisplayName}”的本机登录信息？不会删除云端课件。", "移除账号", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+            _authManager.Remove(account);
+            ShowAccountManager();
+        });
+        menu.IsOpen = true;
     }
 
     private FrameworkElement CreateAccountIdentity(SeewoAuthProfile account, double size)
@@ -307,13 +374,13 @@ public partial class SeewoCloudWindow : Window
             catch { /* 保留首字占位头像。 */ }
         }
         row.Children.Add(avatar);
-        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, MaxWidth = size >= 40 ? 230 : 260, Margin = new Thickness(0, 0, 12, 0) };
         text.Children.Add(new TextBlock
         {
             Text = account.DisplayName + (ReferenceEquals(account, _authManager.CurrentProfile) ? " · 当前" : ""),
-            FontSize = size >= 40 ? 16 : 14, FontWeight = FontWeights.SemiBold
+            FontSize = size >= 40 ? 20 : 14, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis
         });
-        var detail = new TextBlock { Text = AccountDetail(account), Margin = new Thickness(0, 3, 0, 0), FontSize = 12 };
+        var detail = new TextBlock { Text = $"{(string.IsNullOrWhiteSpace(account.StageName) ? "其它" : account.StageName)} · {(string.IsNullOrWhiteSpace(account.SubjectName) ? "其它" : account.SubjectName)}" + (account.IsExpired ? " · 登录已过期" : ""), Margin = new Thickness(0, 3, 0, 0), FontSize = 12 };
         detail.SetResourceReference(TextBlock.ForegroundProperty, "TextFillColorSecondaryBrush");
         text.Children.Add(detail);
         row.Children.Add(text);

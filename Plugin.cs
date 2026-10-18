@@ -156,6 +156,9 @@ public sealed class Plugin : PluginBase
             if (_seewoCloudWindow == null || !_seewoCloudWindow.IsLoaded)
             {
                 _seewoCloudWindow = new SeewoCloudWindow(this, _seewoAuthManager, _seewoApiClient, _seewoDownloader);
+                // 所属窗口始终在宿主上方，避免播放窗口定时锚定层级时盖住云课件。
+                if (Application.Current?.MainWindow is { IsLoaded: true } owner)
+                    _seewoCloudWindow.Owner = owner;
                 _seewoCloudWindow.Closed += (_, _) => _seewoCloudWindow = null;
                 _seewoCloudWindow.Show();
             }
@@ -475,6 +478,19 @@ public sealed class Plugin : PluginBase
         _webView?.OpenDocument(path);
     }
 
+    public async Task OpenCloudCoursewareAsync(SeewoCoursewareItem item)
+    {
+        if (_seewoApiClient == null || _seewoDownloader == null || _webView == null) return;
+        var session = await CloudCoursewareSession.CreateAsync(_seewoApiClient, item.Id, _seewoDownloader.CacheDirectory);
+        try
+        {
+            await EndPresentationAsync();
+            ShowPresentationWindow();
+            _webView.OpenCloudDocument(session);
+        }
+        catch { session.Dispose(); throw; }
+    }
+
     /// <summary>显示承载网页的独立窗口；必须先于 WebView2 初始化，否则控件无法创建。</summary>
     private void ShowPresentationWindow()
     {
@@ -497,6 +513,8 @@ public sealed class Plugin : PluginBase
 
     private async void OnWebMessageReceived(EnbxWebMessage message)
     {
+        // 云会话关闭或替换后，忽略浏览器中迟到的页码与完成通知。
+        if (message.SessionId.Length > 0 && message.SessionId != _webView?.CloudSessionId) return;
         try
         {
             if (message.Type != "enbx:frontend-log")
@@ -590,16 +608,18 @@ public sealed class Plugin : PluginBase
         {
             _host?.Log($"Host navigation requested: {direction}, request={requestId}");
             _webView.Navigate(direction == PresentationNavigation.Previous ? "previous" : "next", requestId);
-            var newPage = await completion.Task.WaitAsync(TimeSpan.FromSeconds(8), cancellationToken);
+            var newPage = await completion.Task.WaitAsync(TimeSpan.FromSeconds(45), cancellationToken);
             if (newPage > 0) SwitchInkPage(newPage);
             return newPage;
         }
         catch (OperationCanceledException)
         {
+            _webView?.CancelNavigation(requestId);
             return 0;
         }
         catch (TimeoutException)
         {
+            _webView?.CancelNavigation(requestId);
             return 0;
         }
         finally
@@ -639,6 +659,7 @@ public sealed class Plugin : PluginBase
 
     private async Task EndPresentationAsync()
     {
+        _webView?.CloseCloudDocument();
         if (Interlocked.Exchange(ref _ending, 1) != 0) return;
 
         _host?.Log("Ending ENBX presentation.");
@@ -750,6 +771,7 @@ public sealed class Plugin : PluginBase
 
 public sealed class EnbxWebMessage
 {
+    public string SessionId { get; set; } = "";
     public string Type { get; set; } = "";
     public string Url { get; set; } = "";
     public string FileName { get; set; } = "";
