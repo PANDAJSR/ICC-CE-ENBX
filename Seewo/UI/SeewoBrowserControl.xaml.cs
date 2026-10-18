@@ -22,6 +22,14 @@ public partial class SeewoBrowserControl : UserControl
     private readonly HashSet<string> _downloadingIds = new(StringComparer.OrdinalIgnoreCase);
 
     public event Action<string>? PlayRequested;
+    public bool IsDownloading => _downloadingIds.Count > 0;
+    private bool _detached;
+
+    public void Detach()
+    {
+        _detached = true;
+        Loaded -= OnLoaded;
+    }
 
     public SeewoBrowserControl(SeewoApiClient apiClient, SeewoDownloader downloader)
     {
@@ -53,6 +61,7 @@ public partial class SeewoBrowserControl : UserControl
             var recentTask = _apiClient.GetRecentListAsync(100);
 
             await Task.WhenAll(groupsTask, recentTask);
+            if (_detached) return;
             _allCoursewareAndGroups = await groupsTask;
             _recentCoursewares = await recentTask;
 
@@ -61,6 +70,7 @@ public partial class SeewoBrowserControl : UserControl
         }
         catch (Exception ex)
         {
+            if (_detached) return;
             MessageBox.Show($"拉取希沃云课件失败: {ex.Message}", "希沃云课件", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         finally
@@ -185,14 +195,6 @@ public partial class SeewoBrowserControl : UserControl
         }
     }
 
-    private void OnEnterFolderClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is FrameworkElement { Tag: SeewoCoursewareItem item } && item.IsGroup)
-        {
-            EnterFolder(item);
-        }
-    }
-
     private void OnListItemMouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (sender is ListViewItem { Content: SeewoCoursewareItem item })
@@ -232,24 +234,9 @@ public partial class SeewoBrowserControl : UserControl
         ApplyFilterAndRender();
     }
 
-    private void OnPlayItemClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is FrameworkElement { Tag: SeewoCoursewareItem item })
-        {
-            StartPlayOrDownload(item, autoPlay: true);
-        }
-    }
-
-    private void OnDownloadOnlyClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is FrameworkElement { Tag: SeewoCoursewareItem item })
-        {
-            StartPlayOrDownload(item, autoPlay: false);
-        }
-    }
-
     private async void StartPlayOrDownload(SeewoCoursewareItem item, bool autoPlay)
     {
+        if (_detached) return;
         if (item.IsGroup) return;
 
         // 若已在下载队列中，避免重复触发

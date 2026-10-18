@@ -26,12 +26,13 @@
                        Width="24" Height="24" VerticalAlignment="Center" Margin="0,0,12,0"/>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                     <TextBlock Text="请在下方登录希沃账号" FontWeight="SemiBold" FontSize="14" Foreground="#1D39C4"/>
-                    <TextBlock Text="登录成功后将自动获取云端课件并持久保存登录态。支持验证码、密码或微信扫码。" 
+                    <TextBlock x:Name="LoginStatus" Text="支持验证码、密码或微信扫码。登录后可在右上角切换账号。"
                                FontSize="12" Foreground="#595959" Margin="0,2,0,0"/>
                 </StackPanel>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Content="刷新登录页" Click="OnRefreshLoginClick" Margin="0,0,8,0" Padding="10,4"/>
-                    <Button Content="清除缓存重新载入" Click="OnClearAndReloadClick" Padding="10,4"/>
+                    <Button Content="重置本次登录" Click="OnClearAndReloadClick" Padding="10,4" Margin="0,0,8,0"/>
+                    <Button Content="取消" Click="OnCancelClick" Padding="10,4"/>
                 </StackPanel>
             </Grid>
         </Border>

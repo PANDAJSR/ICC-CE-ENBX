@@ -203,12 +203,10 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="170"/>
                                 <ColumnDefinition Width="110"/>
-                                <ColumnDefinition Width="170"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="名称" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                             <TextBlock Grid.Column="1" Text="修改时间" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                             <TextBlock Grid.Column="2" Text="大小" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                            <TextBlock Grid.Column="3" Text="状态与操作" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                         </Grid>
                     </Border>
 
@@ -228,7 +226,6 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="170"/>
                                         <ColumnDefinition Width="110"/>
-                                        <ColumnDefinition Width="170"/>
                                     </Grid.ColumnDefinitions>
 
                                     <!-- 名称列 -->
@@ -258,38 +255,6 @@
                                     <TextBlock Grid.Column="2" Text="{Binding DisplaySize}" FontSize="12" 
                                                Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
 
-                                    <!-- 状态与操作列 -->
-                                    <Grid Grid.Column="3" VerticalAlignment="Center">
-                                        <!-- 文件夹操作：打开 -->
-                                        <Button Content="打开" Tag="{Binding}" Click="OnEnterFolderClick"
-                                                Visibility="{Binding FolderVisibility}" HorizontalAlignment="Left"
-                                                Padding="12,3" FontSize="11"/>
-
-                                        <!-- 课件操作与状态 -->
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
-                                                    Visibility="{Binding CoursewareVisibility}">
-                                            <!-- 已缓存徽章 -->
-                                            <Border Background="#F6FFED" BorderBrush="#B7EB8F" BorderThickness="1"
-                                                    CornerRadius="3" Padding="6,2" Margin="0,0,8,0" VerticalAlignment="Center"
-                                                    Visibility="{Binding CachedBadgeVisibility}">
-                                                <TextBlock Text="已缓存" FontSize="11" Foreground="#389E0D"/>
-                                            </Border>
-                                            <!-- 云端未缓存徽章 -->
-                                            <Border Background="#F5F5F5" BorderBrush="#D9D9D9" BorderThickness="1"
-                                                    CornerRadius="3" Padding="6,2" Margin="0,0,8,0" VerticalAlignment="Center"
-                                                    Visibility="{Binding NotCachedBadgeVisibility}">
-                                                <TextBlock Text="云端" FontSize="11" Foreground="#8C8C8C"/>
-                                            </Border>
-
-                                            <!-- 播放按钮 -->
-                                            <Button Content="播放" Tag="{Binding}" Click="OnPlayItemClick" 
-                                                    Style="{DynamicResource AccentButtonStyle}" Padding="10,3" FontSize="11" Margin="0,0,4,0"/>
-                                            <!-- 下载按钮（仅未缓存时显示） -->
-                                            <Button Content="下载" Tag="{Binding}" Click="OnDownloadOnlyClick" 
-                                                    Padding="8,3" FontSize="11"
-                                                    Visibility="{Binding NotCachedBadgeVisibility}"/>
-                                        </StackPanel>
-                                    </Grid>
                                 </Grid>
                             </DataTemplate>
                         </ListView.ItemTemplate>

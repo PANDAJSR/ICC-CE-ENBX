@@ -9,6 +9,11 @@ public sealed class SeewoAuthProfile
 {
     private string _token = string.Empty;
 
+    public string AccountId { get; set; } = Guid.NewGuid().ToString("N");
+    public string Remark { get; set; } = string.Empty;
+    public bool IsExpired { get; set; }
+    public DateTime LastUsedTime { get; set; } = DateTime.UtcNow;
+
     [JsonPropertyName("token")]
     public string Token
     {
@@ -52,7 +57,7 @@ public sealed class SeewoAuthProfile
     public bool IsValid => !string.IsNullOrWhiteSpace(Token);
 
     [JsonIgnore]
-    public string DisplayName => !string.IsNullOrWhiteSpace(NickName) 
+    public string DisplayName => !string.IsNullOrWhiteSpace(Remark) ? Remark : !string.IsNullOrWhiteSpace(NickName)
         ? NickName 
         : (!string.IsNullOrWhiteSpace(UserName) ? UserName : (string.IsNullOrWhiteSpace(Phone) ? "希沃用户" : Phone));
 }

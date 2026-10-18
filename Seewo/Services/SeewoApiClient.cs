@@ -32,7 +32,7 @@ public sealed class SeewoApiClient
         _logger?.Invoke("[SeewoApi] " + message);
     }
 
-    private HttpRequestMessage CreateRequest(HttpMethod method, string pathAndQuery)
+    private HttpRequestMessage CreateRequest(HttpMethod method, string pathAndQuery, SeewoAuthProfile? account = null)
     {
         var url = pathAndQuery.StartsWith("http", StringComparison.OrdinalIgnoreCase) 
             ? pathAndQuery 
@@ -48,7 +48,7 @@ public sealed class SeewoApiClient
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
         // 组装 Cookies
-        var profile = _authManager.CurrentProfile;
+        var profile = account ?? _authManager.CurrentProfile;
         if (profile != null && !string.IsNullOrWhiteSpace(profile.Token))
         {
             request.Headers.TryAddWithoutValidation("x-auth-token", profile.Token);
@@ -83,6 +83,15 @@ public sealed class SeewoApiClient
     /// </summary>
     public async Task<bool> FetchAndUpdateUserProfileAsync()
     {
+        var profile = _authManager.CurrentProfile;
+        if (profile == null) return false;
+        var updated = await FetchUserIdentityAsync(profile);
+        if (updated) _authManager.UpdateProfile(profile);
+        return updated;
+    }
+
+    public async Task<bool> FetchUserIdentityAsync(SeewoAuthProfile profile)
+    {
         var endpoints = new[]
         {
             "https://edu.seewo.com/api/v3/user/info",
@@ -94,10 +103,10 @@ public sealed class SeewoApiClient
         {
             try
             {
-                using var req = CreateRequest(HttpMethod.Get, endpoint);
+                using var req = CreateRequest(HttpMethod.Get, endpoint, profile);
                 using var resp = await _httpClient.SendAsync(req);
                 var rawJson = await resp.Content.ReadAsStringAsync();
-                Log($"FetchUserProfile from {endpoint} status: {resp.StatusCode}, body: {(rawJson.Length > 200 ? rawJson.Substring(0, 200) + "..." : rawJson)}");
+                Log($"FetchUserProfile from {endpoint} status: {resp.StatusCode}");
 
                 if (resp.IsSuccessStatusCode)
                 {
@@ -133,20 +142,14 @@ public sealed class SeewoApiClient
 
                     string? uid = null;
                     if (targetObj.TryGetProperty("uid", out var u1))
-                        uid = u1.GetString();
+                        uid = u1.ToString();
 
-                    if (!string.IsNullOrWhiteSpace(avatar) || !string.IsNullOrWhiteSpace(name))
+                    if (!string.IsNullOrWhiteSpace(avatar) || !string.IsNullOrWhiteSpace(name) || !string.IsNullOrWhiteSpace(uid))
                     {
-                        var profile = _authManager.CurrentProfile;
-                        if (profile != null)
-                        {
-                            if (!string.IsNullOrWhiteSpace(avatar)) profile.AvatarUrl = avatar;
-                            if (!string.IsNullOrWhiteSpace(name)) profile.NickName = name;
-                            if (!string.IsNullOrWhiteSpace(uid)) profile.Uid = uid;
-                            _authManager.Save(profile);
-                            Log($"Successfully updated user profile: name={profile.DisplayName}, avatar={profile.AvatarUrl}");
-                            return true;
-                        }
+                        if (!string.IsNullOrWhiteSpace(avatar)) profile.AvatarUrl = avatar;
+                        if (!string.IsNullOrWhiteSpace(name)) profile.NickName = name;
+                        if (!string.IsNullOrWhiteSpace(uid)) profile.Uid = uid;
+                        return true;
                     }
                 }
             }
@@ -186,6 +189,66 @@ public sealed class SeewoApiClient
         }
     }
 
+    // null 表示网络或服务异常；只有明确的认证错误才返回 false。
+    public string? LastValidationError { get; private set; }
+
+    internal static bool? ClassifyAccountResponse(JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.Object) return null;
+        // 此服务的错误响应使用 error_code，部分成功响应直接返回 data/content。
+        if (root.TryGetProperty("error_code", out var error) && error.ToString() != "0")
+            return error.ToString() is "401" or "403" or "4011" ? false : null;
+        if (root.TryGetProperty("code", out var code))
+        {
+            var value = code.ToString();
+            if (value is "401" or "403" or "4011") return false;
+            if (value != "0") return null;
+            return true;
+        }
+        if (root.TryGetProperty("success", out var success) && success.ValueKind == JsonValueKind.False) return null;
+        foreach (var name in new[] { "data", "content", "items", "list" })
+        {
+            if (!root.TryGetProperty(name, out var data)) continue;
+            if (data.ValueKind == JsonValueKind.Array) return true;
+            if (data.ValueKind != JsonValueKind.Object) continue;
+            foreach (var key in new[] { "content", "items", "list" })
+                if (data.TryGetProperty(key, out var items) && items.ValueKind == JsonValueKind.Array) return true;
+        }
+        return null;
+    }
+
+    public async Task<bool?> ValidateAccountAsync(SeewoAuthProfile profile)
+    {
+        LastValidationError = null;
+        if (!profile.IsValid || profile.Token == "user_authenticated")
+        {
+            LastValidationError = "保存的登录凭证无效，请重新登录。";
+            return false;
+        }
+        try
+        {
+            using var req = CreateRequest(HttpMethod.Get, "/api/courseware-core/recent/list?recentSize=1", profile);
+            using var resp = await _httpClient.SendAsync(req);
+            LastValidationError = $"希沃服务返回 HTTP {(int)resp.StatusCode}。";
+            if (resp.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden) return false;
+            if (!resp.IsSuccessStatusCode) return null;
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            var root = doc.RootElement;
+            var result = ClassifyAccountResponse(root);
+            if (result == true) LastValidationError = null;
+            else if (root.ValueKind == JsonValueKind.Object)
+            {
+                var code = root.TryGetProperty("error_code", out var ec) ? ec.ToString() : root.TryGetProperty("code", out var c) ? c.ToString() : "未提供";
+                LastValidationError = $"希沃服务返回未通过的账号校验（HTTP {(int)resp.StatusCode}，业务码 {code}）。可尝试重新登录。";
+                Log($"Account validation: HTTP {(int)resp.StatusCode}, code={code}, properties={string.Join(",", root.EnumerateObject().Select(x => x.Name))}");
+            }
+            return result;
+        }
+        catch (TaskCanceledException) { LastValidationError = "连接希沃服务超时，请稍后重试。"; return null; }
+        catch (HttpRequestException ex) { LastValidationError = "连接希沃服务失败，请检查网络或代理设置。"; Log($"Account validation transport error: {ex.GetType().Name}"); return null; }
+        catch (JsonException) { LastValidationError = "希沃服务返回了无法识别的内容，请稍后重试。"; return null; }
+    }
+
     /// <summary>
     /// 获取最近打开/修改的课件
     /// </summary>
@@ -212,6 +275,7 @@ public sealed class SeewoApiClient
     /// </summary>
     public async Task<List<SeewoCoursewareItem>> GetAllGroupsAndCoursewaresAsync()
     {
+        var account = _authManager.CurrentProfile;
         var allItems = new List<SeewoCoursewareItem>();
         int pageIndex = 0;
         const int pageSize = 500;
@@ -222,7 +286,7 @@ public sealed class SeewoApiClient
             var url = $"/api/courseware-core/group/list?index={pageIndex}&pagesize={pageSize}";
             Log($"Requesting GetAllGroupsAndCoursewaresAsync: {url}");
 
-            using var req = CreateRequest(HttpMethod.Get, url);
+            using var req = CreateRequest(HttpMethod.Get, url, account);
             using var resp = await _httpClient.SendAsync(req);
             var rawJson = await resp.Content.ReadAsStringAsync();
             Log($"GetAllGroupsAndCoursewaresAsync (page {pageIndex}) Status: {resp.StatusCode}, Raw: {(rawJson.Length > 500 ? rawJson.Substring(0, 500) + "..." : rawJson)}");

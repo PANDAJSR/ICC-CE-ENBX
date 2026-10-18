@@ -254,7 +254,9 @@ public sealed class Plugin : PluginBase
 
         var contentGrid = new Grid
         {
-            Margin = isBoard ? new Thickness(0, 6, 0, 4) : new Thickness(0)
+            Margin = isBoard ? new Thickness(0, 6, 0, 4) : new Thickness(0),
+            // Match the host's unselected floating toolbar button content offset.
+            RenderTransform = isBoard ? Transform.Identity : new TranslateTransform(0, 2)
         };
 
         var img = new Image
@@ -264,6 +266,8 @@ public sealed class Plugin : PluginBase
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Top,
             Margin = isBoard ? new Thickness(0) : new Thickness(0, 1, 0, 0),
+            // Compensate for the PNG's transparent top padding without moving the label.
+            RenderTransform = new TranslateTransform(0, isBoard ? -2 : -3),
             Stretch = Stretch.Uniform
         };
         RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
@@ -296,12 +300,6 @@ public sealed class Plugin : PluginBase
 
         bool isPressed = false;
 
-        border.MouseEnter += (_, _) =>
-        {
-            if (!isPressed)
-                hoverOverlay.Background = new SolidColorBrush(Color.FromArgb(24, 128, 128, 128));
-        };
-
         border.MouseLeave += (_, _) =>
         {
             isPressed = false;
@@ -320,13 +318,15 @@ public sealed class Plugin : PluginBase
             if (isPressed)
             {
                 isPressed = false;
-                hoverOverlay.Background = new SolidColorBrush(Color.FromArgb(24, 128, 128, 128));
+                hoverOverlay.Background = Brushes.Transparent;
                 OpenSeewoCloudWindow();
                 e.Handled = true;
             }
         };
 
-        return border;
+        // The host resets the root Margin when arranging toolbar components.
+        // Keep the button spacing inside a wrapper, as ToolbarImageButton does.
+        return new UserControl { Content = border };
     }
 
     private ImageSource? LoadSeewoIconBitmap()

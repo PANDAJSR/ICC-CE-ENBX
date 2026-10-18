@@ -36,6 +36,16 @@ Key entries to look for:
 | `Host navigation requested: ...` / `enbx:navigation-complete` | Host navigation bar drove a page change |
 | `Host ended presentation source ...` / `Ending ENBX presentation` | Presentation ended, host state restored |
 
+## 希沃多账号
+
+在希沃云课件窗口右上角点击头像和昵称，可直接切换已保存的账号，或进入“管理账号”。管理页支持添加账号、修改本机备注、重新登录和从此设备移除账号。退出当前账号会保留登录信息；移除账号只删除本机记录，不会删除云端课件。下载进行中需先完成或取消下载再切换账号。
+
+每次添加账号均使用独立的 WebView2 隐私会话，避免自动登录其他账号。插件会移除官方登录页的宣传区并居中表单；检测到个人中心跳转后提取真实凭证，验证云课件访问成功后保存账号并释放 WebView。取消登录会返回当前账号，或显示账号选择页。
+
+账号信息保存为插件配置目录下的 `seewo_accounts.dat`，使用 Windows 当前用户的 DPAPI 加密，不能直接复制给其他 Windows 用户使用。旧版 `seewo_auth.json` 会自动迁移，成功写入加密文件后删除旧文件。同一希沃 UID 的重复登录会合并并保留本机备注；用户资料暂未返回时可能短暂显示为“希沃用户”。
+
+手动联调建议：添加两个不同账号并切换；取消第三次登录；重启宿主检查当前账号；修改备注并重新登录同一账号检查合并；退出后选择保存账号；断网切换检查重试提示；下载期间检查切换限制。扫码、验证码和个人中心跳转需使用真实账号在宿主中验证。
+
 ## Development
 
 ### 1. 配置宿主路径（.env）
