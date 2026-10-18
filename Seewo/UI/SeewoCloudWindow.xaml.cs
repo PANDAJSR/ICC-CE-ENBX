@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Shell;
 using System.Windows.Media.Imaging;
 using ICC.CE.ENBX.Seewo.Models;
 using ICC.CE.ENBX.Seewo.Services;
@@ -29,6 +30,7 @@ public partial class SeewoCloudWindow : Window
         _downloader = downloader;
 
         Loaded += OnLoaded;
+        StateChanged += OnWindowStateChanged;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -162,5 +164,36 @@ public partial class SeewoCloudWindow : Window
         {
             MessageBox.Show($"打开日志失败: {ex.Message}", "诊断日志", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    private void OnMinimizeClick(object sender, RoutedEventArgs e)
+    {
+        SystemCommands.MinimizeWindow(this);
+    }
+
+    private void OnMaximizeClick(object sender, RoutedEventArgs e)
+    {
+        if (WindowState == WindowState.Maximized)
+        {
+            SystemCommands.RestoreWindow(this);
+        }
+        else
+        {
+            SystemCommands.MaximizeWindow(this);
+        }
+    }
+
+    private void OnCloseClick(object sender, RoutedEventArgs e)
+    {
+        SystemCommands.CloseWindow(this);
+    }
+
+    private void OnWindowStateChanged(object? sender, EventArgs e)
+    {
+        if (MaximizeButton == null)
+            return;
+
+        MaximizeButton.Content = WindowState == WindowState.Maximized ? "❐" : "□";
+        MaximizeButton.ToolTip = WindowState == WindowState.Maximized ? "还原" : "最大化";
     }
 }
