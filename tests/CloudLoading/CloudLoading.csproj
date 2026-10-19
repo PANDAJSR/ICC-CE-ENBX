@@ -6,10 +6,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../Seewo/Services/PriorityDownloadQueue.cs" Link="PriorityDownloadQueue.cs" />
-    <Compile Include="../../Seewo/Services/CloudCoursewareSession.cs" Link="CloudCoursewareSession.cs" />
-    <Compile Include="../../Seewo/Models/SeewoDetailResponse.cs" Link="SeewoDetailResponse.cs" />
-    <Compile Include="../../CoursewareRangeStream.cs" Link="CoursewareRangeStream.cs" />
-    <Compile Include="../../PluginSettings.cs" Link="PluginSettings.cs" />
+    <Compile Include="../../src/Seewo/Services/PriorityDownloadQueue.cs" Link="PriorityDownloadQueue.cs" />
+    <Compile Include="../../src/Seewo/Services/CloudCoursewareSession.cs" Link="CloudCoursewareSession.cs" />
+    <Compile Include="../../src/Seewo/Models/SeewoDetailResponse.cs" Link="SeewoDetailResponse.cs" />
+    <Compile Include="../../src/Presentation/CoursewareRangeStream.cs" Link="CoursewareRangeStream.cs" />
+    <Compile Include="../../src/Settings/PluginSettings.cs" Link="PluginSettings.cs" />
   </ItemGroup>
 </Project>

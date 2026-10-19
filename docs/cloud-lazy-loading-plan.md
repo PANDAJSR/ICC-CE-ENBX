@@ -18,10 +18,10 @@
 
 | 层 | 当前行为 | 改造方向 |
 | --- | --- | --- |
-| `Seewo/UI/SeewoBrowserControl.xaml.cs:237` | 播放与下载共用 `DownloadAndPackageAsync` | 播放创建云会话；“下载到本地”继续全量下载/打包 |
-| `Seewo/Services/SeewoDownloader.cs:61` | 4 路下载全部文件，再打包 ZIP，最后返回路径 | 提取可复用文件获取器；散文件缓存直接供播放器读取 |
+| `src/Seewo/UI/SeewoBrowserControl.xaml.cs` | 播放与下载共用 `DownloadAndPackageAsync` | 播放创建云会话；“下载到本地”继续全量下载/打包 |
+| `src/Seewo/Services/SeewoDownloader.cs` | 4 路下载全部文件，再打包 ZIP，最后返回路径 | 提取可复用文件获取器；散文件缓存直接供播放器读取 |
 | `Plugin.cs:448` | 输入只能是本地 ENBX 路径 | 增加 `OpenCloudCoursewareAsync`，复用放映窗口和演示源生命周期 |
-| `EnbxWebViewLayer.cs:226` | `/document/{token}` 只返回整个文件 | 增加会话 manifest 与逐文件读取路由 |
+| `src/Presentation/EnbxWebViewLayer.cs` | `/document/{token}` 只返回整个文件 | 增加会话 manifest 与逐文件读取路由 |
 | WebEasiNote `src/App.tsx:183` | URL 全量读为 Blob 后再解析 ZIP | 增加基于 HTTP 文件源的打开入口 |
 | WebEasiNote `src/courseware-loader.ts:20` | 预先创建所有资源 Blob URL、解析全部页、预热全部静态计划 | 拆为初始化、单页解析、按需资源、空闲预热 |
 | WebEasiNote `src/parser.ts:180` | 枚举并按 `Slide_N` 排序加载全部页面 | 显式页目录与单页解析；不把页面 ID 当成文件名 |
@@ -39,7 +39,7 @@ ICC-CE 现有 `IPresentationSourceService` 已支持异步翻页与固定总页�
 - `PartialDownloadingSlideLoader` 搜索该页未下载的资源，先创建只含 ID/尺寸的临时页，资源完成后设置完整内容；有下载/加载失败和重试状态。这与本方案的“文字图形先显示，图片逐项补齐”不同。
 - `CoursewarePartialDownloadingQueue` 的反编译结果显示 4 个运行槽、按文件去重、按页关联及 `JumpToDownloadQueueHead`。这是队列能力的静态观察；本次未继续验证所有调用者何时提升优先级。
 
-研究来源及工具限制见 `D:/Code/EasiNote-Resarch/lazy-loading/README.md`。以上不代表官方运行时实测结果，也未验证该实验开关在当前用户配置中是否启用。
+研究来源及工具限制见 `D:/Code/EasiNote-Resarch/topics/lazy-loading/README.md`。以上不代表官方运行时实测结果，也未验证该实验开关在当前用户配置中是否启用。
 
 ## 4. 建议架构
 

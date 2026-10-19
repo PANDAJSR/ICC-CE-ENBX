@@ -48,6 +48,19 @@ Key entries to look for:
 
 ## Development
 
+### Repository layout
+
+- `src/Plugin.cs`: plugin entry point.
+- `src/Presentation/`: WebView2 playback, presentation window and range streams.
+- `src/Host/`: host menu and ink integration.
+- `src/Import/`: MHB import.
+- `src/Settings/`: settings model and controls.
+- `src/Seewo/`: cloud models, services and WPF UI.
+- `Resources/`: WPF resources; root icons and `manifest.json` are package metadata.
+- `scripts/`, `tests/`, `docs/`: development tools, verification and design notes.
+
+Keep the project file and build entry points at the root so existing build commands continue to work. `bin/`, `obj/`, `icpx/`, local `.env` files and generated binaries are ignored. PNG icons are intentional source assets and should remain tracked. Use `git ls-files` to distinguish tracked files from local build output; `.gitignore` does not untrack files already committed.
+
 ### 1. 配置宿主路径（.env）
 
 在项目根目录的 `.env` 中指定 ICC-CE 本体仓库路径（支持相对路径或绝对路径）：

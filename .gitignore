@@ -6,3 +6,27 @@ node_modules/
 .env
 scripts/*.exe
 
+# Generated packages, diagnostics and local courseware
+dist/
+release/
+artifacts/
+coverage/
+*.icpx
+*.dll
+*.exe
+*.pdb
+*.log
+*.enbx
+*.mhb
+
+# Local configuration and editor state
+.env.*
+!.env.example
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+.DS_Store
+Thumbs.db
+
