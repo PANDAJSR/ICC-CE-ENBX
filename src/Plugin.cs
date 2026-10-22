@@ -127,9 +127,14 @@ public sealed class Plugin : PluginBase
 
     public override void Shutdown()
     {
+        _ = ShutdownAsync();
+    }
+
+    private async Task ShutdownAsync()
+    {
         try
         {
-            EndPresentationAsync().GetAwaiter().GetResult();
+            await EndPresentationAsync();
             _toolsMenu?.Dispose();
             if (_presentation != null) _presentation.Ended -= OnPresentationEnded;
             _webView?.Dispose();
