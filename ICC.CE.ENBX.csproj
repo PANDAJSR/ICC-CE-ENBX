@@ -10,16 +10,22 @@
     <LangVersion>latest</LangVersion>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <CreateIcpx>true</CreateIcpx>
+    <UseLocalPluginSdk Condition="'$(UseLocalPluginSdk)' == '' and Exists('..\iccce\InkCanvas.PluginSdk\InkCanvas.PluginSdk.csproj')">true</UseLocalPluginSdk>
     <IcpxPackageName>com.pandajsr.icc-ce-enbx.icpx</IcpxPackageName>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="InkCanvas.PluginSdk" Version="1.8.0.2-gbd4880718d">
+    <PackageReference Include="InkCanvas.PluginSdk" Version="1.8.0.2-gbd4880718d" Condition="'$(UseLocalPluginSdk)' != 'true'">
       <Private>false</Private>
     </PackageReference>
     <PackageReference Include="iNKORE.UI.WPF.Modern" Version="0.10.2.1" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
   </ItemGroup>
+
+  <ItemGroup Condition="'$(UseLocalPluginSdk)' == 'true'">
+    <ProjectReference Include="..\iccce\InkCanvas.PluginSdk\InkCanvas.PluginSdk.csproj" Private="false" />
+  </ItemGroup>
+  <Import Project="..\iccce\InkCanvas.PluginSdk\InkCanvas.PluginSdk.targets" Condition="'$(UseLocalPluginSdk)' == 'true'" />
 
   <ItemGroup Condition="Exists('..\WebEasiNote\dist')">
     <EmbeddedResource Include="..\WebEasiNote\dist\**\*.*">

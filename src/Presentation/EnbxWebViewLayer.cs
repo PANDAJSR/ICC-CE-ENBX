@@ -22,6 +22,7 @@ public sealed partial class EnbxWebViewLayer : Grid, IDisposable
     private string? _documentToken;
     private bool _isReady;
     private bool _disposed;
+    private bool _elementSelection;
 
     public static bool DiagnosticsEnabled
         => string.Equals(Environment.GetEnvironmentVariable("ICC_CE_ENBX_DEVTOOLS"), "1", StringComparison.OrdinalIgnoreCase)
@@ -38,7 +39,7 @@ public sealed partial class EnbxWebViewLayer : Grid, IDisposable
         ClipToBounds = true;
         _webView.PreviewKeyDown += (sender, e) =>
         {
-            if (e.Key == System.Windows.Input.Key.Escape)
+            if (e.Key == System.Windows.Input.Key.Escape && !_elementSelection)
             {
                 MessageReceived?.Invoke(new EnbxWebMessage { Type = "enbx:close" });
             }
@@ -65,6 +66,15 @@ public sealed partial class EnbxWebViewLayer : Grid, IDisposable
     {
         Dispatcher.BeginInvoke(new Action(() =>
             Post(new { type = "enbx:toggle-thumbnails", side = side == "right" ? "right" : "left" })));
+    }
+
+    public void SetElementSelection(bool active)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            _elementSelection = active;
+            Post(new { type = "enbx:set-interaction-mode", mode = active ? "select" : "play" });
+        });
     }
 
     public void UpdateSettings(PluginSettings settings)
@@ -209,6 +219,7 @@ public sealed partial class EnbxWebViewLayer : Grid, IDisposable
                 OpenDevTools();
             }
             if (message.Type == "enbx:web-ready") PostOpenDocument();
+            if (message.Type == "enbx:interaction-ready") SetElementSelection(_elementSelection);
             MessageReceived?.Invoke(message);
         }
         catch (Exception ex)

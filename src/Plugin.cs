@@ -579,6 +579,8 @@ public sealed class Plugin : PluginBase
             AllowPageNumberClick = true,
             NavigateAsync = NavigateAsync
         };
+        HostPlaybackSelectionBridge.Configure(descriptor, active => _webView?.SetElementSelection(active),
+            message => _host?.Log(message));
 
         if (!await _presentation.BeginAsync(descriptor))
         {
