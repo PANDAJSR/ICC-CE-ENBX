@@ -13,7 +13,7 @@ using ICC.CE.ENBX.Seewo.UI;
 namespace ICC.CE.ENBX;
 
 [PluginEntrance]
-public sealed class Plugin : PluginBase
+public sealed partial class Plugin : PluginBase
 {
     public const string PluginId = "com.pandajsr.icc-ce-enbx";
 
@@ -23,7 +23,6 @@ public sealed class Plugin : PluginBase
     private IWindowService? _window;
     private EnbxWebViewLayer? _webView;
     private EnbxPresentationWindow? _presentationWindow;
-    private HostInkPageBridge? _inkBridge;
     private ToolsMenuBridge? _toolsMenu;
     private readonly Dictionary<string, TaskCompletionSource<int>> _navigationRequests = new();
     private readonly object _navigationLock = new();
@@ -72,7 +71,6 @@ public sealed class Plugin : PluginBase
         _presentationWindow = new EnbxPresentationWindow(_webView);
         _presentationWindow.CloseRequested += (s, e) => _ = EndPresentationAsync();
         _presentationWindow.PageClickRequested += OnPresentationPageClickRequested;
-        _inkBridge = new HostInkPageBridge(this);
 
         _presentation.Ended += OnPresentationEnded;
         _toolsMenu = new ToolsMenuBridge(this);
@@ -508,7 +506,6 @@ public sealed class Plugin : PluginBase
         }
 
         _presentationWindow?.ShowFor(mainWindow);
-        _inkBridge?.Attach(mainWindow);
         SetHostOverlay(true);
         _host?.Log("ENBX output window shown behind the ICC-CE window.");
     }
@@ -519,6 +516,11 @@ public sealed class Plugin : PluginBase
 
     private async void OnWebMessageReceived(EnbxWebMessage message)
     {
+        if (message.Type.StartsWith("enbx:annotation-", StringComparison.Ordinal))
+        {
+            OnAnnotationMessage(message);
+            return;
+        }
         // 云会话关闭或替换后，忽略浏览器中迟到的页码与完成通知。
         if (message.SessionId.Length > 0 && message.SessionId != _webView?.CloudSessionId) return;
         try
@@ -585,8 +587,7 @@ public sealed class Plugin : PluginBase
             AllowPageNumberClick = true,
             NavigateAsync = NavigateAsync
         };
-        HostPlaybackSelectionBridge.Configure(descriptor, active => _webView?.SetElementSelection(active),
-            message => _host?.Log(message));
+        ConfigureWebAnnotation(descriptor);
 
         if (!await _presentation.BeginAsync(descriptor))
         {
@@ -598,7 +599,6 @@ public sealed class Plugin : PluginBase
         _presentationActive = true;
         _activePageCount = pageCount;
         _currentPresentationPage = descriptor.CurrentPage;
-        _inkBridge?.BeginDocument(_currentPresentationPage);
         _ending = 0;
         _window?.SetFullscreen(true);
         _host?.Log("ENBX presentation active; host PPT controls should now be visible.");
@@ -657,12 +657,11 @@ public sealed class Plugin : PluginBase
         _webView?.ToggleThumbnails(side);
     }
 
-    /// <summary>把宿主翻页同步到墨迹分页，保证批注留在各自页面。</summary>
+    /// <summary>同步放映页码；墨迹分页由 Web 管理。</summary>
     private void SwitchInkPage(int page)
     {
         if (page <= 0 || page == _currentPresentationPage) return;
         _currentPresentationPage = page;
-        _inkBridge?.SwitchPage(page);
     }
 
     private async Task EndPresentationAsync()
@@ -684,9 +683,11 @@ public sealed class Plugin : PluginBase
         finally
         {
             _presentationActive = false;
+            _annotationDescriptor = null;
+            _annotationState = null;
+            _annotationSessionId = "";
             _activePageCount = 0;
             _currentPresentationPage = 0;
-            _inkBridge?.EndDocument();
             _webView?.SetViewerVisible(false);
             _presentationWindow?.Hide();
             SetHostOverlay(false);
@@ -779,6 +780,11 @@ public sealed class Plugin : PluginBase
 
 public sealed class EnbxWebMessage
 {
+    public int ProtocolVersion { get; set; }
+    public bool CanUndo { get; set; }
+    public bool CanRedo { get; set; }
+    public PresentationAnnotationStatus? State { get; set; }
+    public bool Success { get; set; }
     public string SessionId { get; set; } = "";
     public string Type { get; set; } = "";
     public string Url { get; set; } = "";
