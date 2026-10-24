@@ -58,6 +58,14 @@ public sealed partial class EnbxWebViewLayer
         };
         try
         {
+            // NewWindow 接管前先写入账号 Cookie，确保弹窗的首个请求就携带登录态。
+            await SynchronizeBrowserAuthAsync();
+            if (!_webPopups.Contains(popup)) return;
+            if (_disposed || !IsVisible || _popupOwner?.IsVisible != true)
+            {
+                popup.Close();
+                return;
+            }
             popup.Show();
             await web.EnsureCoreWebView2Async(_webView.CoreWebView2.Environment);
             // 用户可能在异步初始化期间关闭弹窗或结束放映。

@@ -431,6 +431,8 @@ public sealed partial class EnbxWebViewLayer : Grid, IDisposable
     public void Dispose()
     {
         if (_disposed) return;
+        DetachBrowserAuthManager();
+        CloseWebPopups();
         _disposed = true;
         CloseCloudDocument();
         if (_webView.CoreWebView2 != null)

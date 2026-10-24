@@ -93,6 +93,7 @@ public sealed partial class Plugin : PluginBase
 
         // 初始化希沃云课件服务与工具栏组件
         _seewoAuthManager = new SeewoAuthManager(PluginConfigFolder);
+        _webView.SetBrowserAuthManager(_seewoAuthManager);
         var logFilePath = Path.Combine(PluginConfigFolder, "seewo_cloud.log");
         _seewoApiClient = new SeewoApiClient(_seewoAuthManager, msg =>
         {
