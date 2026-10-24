@@ -20,10 +20,14 @@
     </PackageReference>
     <PackageReference Include="iNKORE.UI.WPF.Modern" Version="0.10.2.1" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+    <PackageReference Include="QRCoder" Version="1.6.0" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseLocalPluginSdk)' == 'true'">
     <ProjectReference Include="..\iccce\InkCanvas.PluginSdk\InkCanvas.PluginSdk.csproj" Private="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="tools\SeewoImBridge\SeewoImBridge.csproj" ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
   <Import Project="..\iccce\InkCanvas.PluginSdk\InkCanvas.PluginSdk.targets" Condition="'$(UseLocalPluginSdk)' == 'true'" />
 
@@ -43,4 +47,11 @@
     <Resource Include="Resources\**\*.*" />
     <None Update="Resources\**\*.*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <Target Name="CopySeewoImBridge" AfterTargets="Build" BeforeTargets="CreateIcpxPackage">
+    <Delete Files="$(OutputPath)SeewoImBridge.exe;$(OutputPath)SeewoImBridge.deps.json;$(OutputPath)SeewoImBridge.runtimeconfig.json" />
+    <ItemGroup>
+      <SeewoBridgeFiles Include="tools\SeewoImBridge\bin\$(Configuration)\net10.0-windows\win-x86\SeewoImBridge.exe;tools\SeewoImBridge\bin\$(Configuration)\net10.0-windows\win-x86\SeewoImBridge.dll;tools\SeewoImBridge\bin\$(Configuration)\net10.0-windows\win-x86\SeewoImBridge.deps.json;tools\SeewoImBridge\bin\$(Configuration)\net10.0-windows\win-x86\SeewoImBridge.runtimeconfig.json" />
+    </ItemGroup>
+    <Copy SourceFiles="@(SeewoBridgeFiles)" DestinationFolder="$(OutputPath)SeewoImBridge" SkipUnchangedFiles="true" />
+  </Target>
 </Project>

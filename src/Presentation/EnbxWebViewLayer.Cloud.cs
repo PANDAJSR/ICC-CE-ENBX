@@ -8,6 +8,7 @@ public sealed partial class EnbxWebViewLayer
 {
     private CloudCoursewareSession? _cloudSession;
     public string? CloudSessionId => _cloudSession?.Id;
+    internal CloudCoursewareSession? CloudDocument => _cloudSession;
 
     public void OpenCloudDocument(CloudCoursewareSession session)
     {
@@ -21,6 +22,7 @@ public sealed partial class EnbxWebViewLayer
 
     public void CloseCloudDocument()
     {
+        CancelImageRequests();
         if (_cloudSession != null && !_disposed)
             Post(new { type = "enbx:close-cloud", sessionId = _cloudSession.Id });
         _cloudSession?.Dispose();

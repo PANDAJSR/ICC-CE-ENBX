@@ -49,6 +49,7 @@ public sealed partial class EnbxWebViewLayer : Grid, IDisposable
 
     public void OpenDocument(string path)
     {
+        CancelImageRequests();
         CloseCloudDocument();
         _documentPath = Path.GetFullPath(path);
         _documentToken = Guid.NewGuid().ToString("N");
@@ -200,6 +201,7 @@ public sealed partial class EnbxWebViewLayer : Grid, IDisposable
         {
             var message = JsonSerializer.Deserialize<EnbxWebMessage>(e.WebMessageAsJson, JsonOptions);
             if (message == null) return;
+            if (message.Type == "image-inserted") CompleteImageRequest(message);
             if (message.Type != "enbx:frontend-log")
             {
                 Diagnostic?.Invoke("Received web message: " + message.Type);
@@ -431,6 +433,7 @@ public sealed partial class EnbxWebViewLayer : Grid, IDisposable
     public void Dispose()
     {
         if (_disposed) return;
+        CancelImageRequests();
         DetachBrowserAuthManager();
         CloseWebPopups();
         _disposed = true;

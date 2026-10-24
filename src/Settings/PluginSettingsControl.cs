@@ -88,6 +88,16 @@ public sealed class PluginSettingsControl : UserControl
             Margin = new Thickness(0, 0, 0, 4)
         });
 
+        var pptRemoteButton = new Button { Content = "打开配对二维码" };
+        pptRemoteButton.Click += (_, _) => _plugin.OpenPptRemoteWindow();
+        stackPanel.Children.Add(new ModernControls.SettingsCard
+        {
+            Header = "希沃手机 PPT 控制",
+            Description = "手机扫码后控制 CE 联动的 PowerPoint/WPS 放映，支持前后翻页和指定页。",
+            Content = pptRemoteButton,
+            Margin = new Thickness(0, 0, 0, 4)
+        });
+
         rootGrid.Children.Add(stackPanel);
         Content = rootGrid;
     }

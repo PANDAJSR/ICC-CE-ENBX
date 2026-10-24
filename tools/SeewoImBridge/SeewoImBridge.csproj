@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RuntimeIdentifier>win-x86</RuntimeIdentifier>
+    <PlatformTarget>x86</PlatformTarget>
+    <SelfContained>false</SelfContained>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <SeewoInstallDirectory Condition="'$(SeewoInstallDirectory)' == ''">C:\Program Files (x86)\Seewo\EasiNote5\EasiNote5_5.2.4.10148\Main</SeewoInstallDirectory>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="IMWrapper">
+      <HintPath>$(SeewoInstallDirectory)\runtimes\win-x86\lib\net5.0\IMWrapper.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  <Target Name="CheckInstalledSdk" BeforeTargets="ResolveReferences">
+    <Error Condition="!Exists('$(SeewoInstallDirectory)\runtimes\win-x86\lib\net5.0\IMWrapper.dll')" Text="Installed IMWrapper.dll not found. Set -p:SeewoInstallDirectory to the EasiNote Main directory." />
+  </Target>
+</Project>

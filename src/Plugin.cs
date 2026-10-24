@@ -13,7 +13,7 @@ using ICC.CE.ENBX.Seewo.UI;
 namespace ICC.CE.ENBX;
 
 [PluginEntrance]
-public sealed class Plugin : PluginBase
+public sealed partial class Plugin : PluginBase
 {
     public const string PluginId = "com.pandajsr.icc-ce-enbx";
 
@@ -40,6 +40,7 @@ public sealed class Plugin : PluginBase
     private SeewoApiClient? _seewoApiClient;
     private SeewoDownloader? _seewoDownloader;
     private SeewoCloudWindow? _seewoCloudWindow;
+    private SeewoDeviceSession? _seewoDeviceSession;
 
     public override string Id => PluginId;
     public override string Name => "希沃白板播放器";
@@ -107,6 +108,8 @@ public sealed class Plugin : PluginBase
             catch { }
         });
         _seewoDownloader = new SeewoDownloader(_seewoApiClient, PluginConfigFolder);
+        _seewoDeviceSession = new SeewoDeviceSession(_seewoAuthManager, PluginConfigFolder, PluginFolder,
+            InsertMobileImageAsync, message => _host?.Log("[SeewoMobile] " + message), NavigateFromMobileAsync);
         RegisterSeewoToolbarItem(host);
 
         host.Log("ENBX presentation plugin initialized.");
@@ -133,6 +136,10 @@ public sealed class Plugin : PluginBase
 
     private async Task ShutdownAsync()
     {
+        _pptRemoteServer?.Dispose();
+        Application.Current?.Dispatcher?.Invoke(() => _pptRemoteWindow?.Close());
+        _seewoDeviceSession?.Dispose();
+        EndMobilePlayback();
         try
         {
             await EndPresentationAsync();
@@ -535,6 +542,7 @@ public sealed class Plugin : PluginBase
                     break;
                 case "enbx:document-loaded":
                     await BeginPresentationAsync(message.PageCount, message.CurrentPage);
+                    BeginMobilePlayback(message);
                     break;
                 case "enbx:navigation-complete":
                     CompleteNavigation(message.RequestId, message.Page);
@@ -664,10 +672,12 @@ public sealed class Plugin : PluginBase
         if (page <= 0 || page == _currentPresentationPage) return;
         _currentPresentationPage = page;
         _inkBridge?.SwitchPage(page);
+        UpdateMobilePlaybackPage(page);
     }
 
     private async Task EndPresentationAsync()
     {
+        EndMobilePlayback();
         _webView?.CloseCloudDocument();
         if (Interlocked.Exchange(ref _ending, 1) != 0) return;
 
@@ -780,6 +790,8 @@ public sealed class Plugin : PluginBase
 
 public sealed class EnbxWebMessage
 {
+    public string[] SlideIds { get; set; } = [];
+    public bool Success { get; set; }
     public string SessionId { get; set; } = "";
     public string Type { get; set; } = "";
     public string Url { get; set; } = "";
