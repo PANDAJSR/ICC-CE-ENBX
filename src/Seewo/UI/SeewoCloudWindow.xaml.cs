@@ -6,6 +6,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Media;
 using ICC.CE.ENBX.Seewo.Models;
 using ICC.CE.ENBX.Seewo.Services;
+using Ink_Canvas.Plugins;
 
 namespace ICC.CE.ENBX.Seewo.UI;
 
@@ -26,7 +27,8 @@ public partial class SeewoCloudWindow : Window
         Plugin plugin,
         SeewoAuthManager authManager,
         SeewoApiClient apiClient,
-        SeewoDownloader downloader)
+        SeewoDownloader downloader,
+        IThemeService? themeService = null)
     {
         InitializeComponent();
         _plugin = plugin;
@@ -34,6 +36,9 @@ public partial class SeewoCloudWindow : Window
         _apiClient = apiClient;
         _downloader = downloader;
 
+        // 使用宿主配置的主题，避免继承白板操作遗留的应用级主题。
+        themeService?.ApplyThemeToElement(this);
+        Activated += (_, _) => themeService?.ApplyThemeToElement(this);
         Loaded += OnLoaded;
         Closed += (_, _) =>
         {
