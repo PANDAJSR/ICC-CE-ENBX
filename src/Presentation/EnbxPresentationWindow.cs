@@ -82,6 +82,7 @@ internal sealed class EnbxPresentationWindow : IDisposable
     public void ShowFor(Window host)
     {
         if (_disposed) return;
+        _layer.SetPopupOwner(host);
 
         if (_window == null)
         {
@@ -139,6 +140,7 @@ internal sealed class EnbxPresentationWindow : IDisposable
 
     public void Hide()
     {
+        _layer.CloseWebPopups();
         _anchorTimer?.Stop();
         DetachHost();
         _window?.Hide();
@@ -445,6 +447,7 @@ internal sealed class EnbxPresentationWindow : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _layer.CloseWebPopups();
 
         _anchorTimer?.Stop();
         _anchorTimer = null;
