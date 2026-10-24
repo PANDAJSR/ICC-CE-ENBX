@@ -127,9 +127,14 @@ public sealed class Plugin : PluginBase
 
     public override void Shutdown()
     {
+        _ = ShutdownAsync();
+    }
+
+    private async Task ShutdownAsync()
+    {
         try
         {
-            EndPresentationAsync().GetAwaiter().GetResult();
+            await EndPresentationAsync();
             _toolsMenu?.Dispose();
             if (_presentation != null) _presentation.Ended -= OnPresentationEnded;
             _webView?.Dispose();
@@ -155,7 +160,8 @@ public sealed class Plugin : PluginBase
 
             if (_seewoCloudWindow == null || !_seewoCloudWindow.IsLoaded)
             {
-                _seewoCloudWindow = new SeewoCloudWindow(this, _seewoAuthManager, _seewoApiClient, _seewoDownloader);
+                _seewoCloudWindow = new SeewoCloudWindow(this, _seewoAuthManager, _seewoApiClient, _seewoDownloader,
+                    _host?.GetService<IThemeService>());
                 // 所属窗口始终在宿主上方，避免播放窗口定时锚定层级时盖住云课件。
                 if (Application.Current?.MainWindow is { IsLoaded: true } owner)
                     _seewoCloudWindow.Owner = owner;
