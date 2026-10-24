@@ -66,34 +66,43 @@ public partial class SeewoLoginControl : UserControl, IDisposable
     {
         if (_initialized || _disposed) return;
         _initialized = true;
+        var stage = "create-session-directory";
         try
         {
-            var folder = Path.Combine(_cacheDirectory, "SeewoLoginSessions");
+            // 独立数据目录隔离账号，无需自定义 Profile / InPrivate 控制器接口。
+            var folder = Path.Combine(_cacheDirectory, "SeewoLoginSessions", _sessionName);
             Directory.CreateDirectory(folder);
+            stage = "create-environment";
             var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: folder);
             if (_disposed) return;
-            // 每次添加/重新登录均使用独立的隐私会话，不继承其他账号的 Cookie。
-            var options = environment.CreateCoreWebView2ControllerOptions();
-            options.ProfileName = _sessionName;
-            options.IsInPrivateModeEnabled = true;
-            await LoginWebView.EnsureCoreWebView2Async(environment, options);
+            _apiClient.Log($"Login WebView2 runtime={environment.BrowserVersionString}, session={_sessionName}");
+            stage = "create-controller";
+            await LoginWebView.EnsureCoreWebView2Async(environment);
             if (_disposed) return;
             var core = LoginWebView.CoreWebView2;
+            stage = "configure-settings";
             core.Settings.IsStatusBarEnabled = false;
             core.Settings.AreDefaultContextMenusEnabled = false;
             core.Settings.IsPasswordAutosaveEnabled = false;
             core.Settings.IsGeneralAutofillEnabled = false;
+            stage = "install-login-style";
             await core.AddScriptToExecuteOnDocumentCreatedAsync(LoginStyleScript);
             if (_disposed) return;
             core.SourceChanged += OnSourceChanged;
             core.NavigationStarting += OnNavigationStarting;
             core.NavigationCompleted += OnNavigationCompleted;
             _timer.Start();
+            stage = "navigate-login";
             core.Navigate("https://id.seewo.com/login");
         }
         catch (Exception ex)
         {
-            if (!_disposed) LoadingText.Text = $"初始化登录组件失败：{ex.Message}";
+            _apiClient.Log($"Login initialization failed: stage={stage}, HRESULT=0x{ex.HResult:X8}, {ex}");
+            if (!_disposed)
+            {
+                LoadingText.Text = $"初始化登录组件失败：{ex.Message}\n阶段：{stage}，错误码：0x{ex.HResult:X8}。请更新 WebView2 Runtime 后重试，并提供诊断日志。";
+                LoadingProgress.IsActive = false;
+            }
         }
     }
 

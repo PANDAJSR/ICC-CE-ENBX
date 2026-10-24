@@ -8,6 +8,7 @@
     "dev": "node scripts/dev.mjs",
     "dev:host": "node scripts/dev.mjs --no-plugin",
     "build": "node scripts/build.mjs",
+    "build:bundle": "node scripts/build-bundle.mjs",
     "build:plugin": "powershell -ExecutionPolicy Bypass -File ./build-plugin.ps1"
   },
   "keywords": [

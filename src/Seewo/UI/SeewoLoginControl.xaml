@@ -44,7 +44,7 @@
             <!-- 加载中遮罩 -->
             <Border x:Name="LoadingOverlay" Background="#99FFFFFF" Visibility="Visible">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <ui:ProgressRing IsActive="True" Width="42" Height="42"/>
+                    <ui:ProgressRing x:Name="LoadingProgress" IsActive="True" Width="42" Height="42"/>
                     <TextBlock x:Name="LoadingText" Text="正在加载希沃认证中心..." Margin="0,14,0,0" 
                                FontSize="13" Foreground="#333333" HorizontalAlignment="Center"/>
                 </StackPanel>
